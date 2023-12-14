@@ -1,0 +1,204 @@
+
+   !!!Number of emission classes
+   !!INTEGER, PARAMETER :: NCLASS = 19
+   !!INTEGER, PARAMETER :: NEMIS  = NCLASS
+   !!! number of emission classes
+
+  !MEGCAN.EXT data ----------------------------------------
+    real , parameter :: convertwm2toumolm2s = 4.5, solarconstant = 1367., waterairratio = 18.016/28.97
+     real,parameter :: Sb = 0.0000000567 !5.6704E-8 !  Stefan-boltzman constant  W m-2 K-4
+     ! Canopy characteristics for MEGCAN canopy types
+     !INTEGER , PARAMETER :: NRTYP = 6          ! Number of canopy types
+     INTEGER , PARAMETER :: NRCHA = 17         ! Number of canopy characteristics
+     ! 16 variables are assigned for each canopy type
+     ! 1  = canopy depth
+     ! 2  = leaf width
+     ! 3  = leaf length
+     ! 4  = canopy height
+     ! 5  = scattering coefficient for PPFD
+     ! 6  = scattering coefficient for near IR
+     ! 7  = reflection coefficient for diffuse PPFD
+     ! 8  = reflection coefficient for diffuse near IR
+     ! 9  = clustering coefficient (accounts for leaf clumping influence on mean projected leaf area in the direction of the suns beam)
+     ! 10 = leaf IR emissivity
+     ! 11 = leaf stomata and cuticle factor: 1=hypostomatous, 2=amphistomatous, 1.25=hypostomatous but with some transpiration through cuticle
+     ! 12 = daytime temperature lapse rate (K m-1)
+     ! 13 = nighttime temperature lapse rate (K m-1)
+     ! 14 = warm (>283K) canopy total humidity change (Pa)
+     ! 15 = cool (>= 283K) canopy total humidity change (Pa)
+     ! 16 = normalized canopy depth where wind is negligible
+     ! 17 = canopy transparency
+     REAL , DIMENSION(NRCHA,NRTYP) :: Canopychar = reshape( &                                                ! canopy types 
+   !vars:1,     2,    3,    4,   5,   6,     7,     8,    9,   10,   11,   12,    13,   14,   15,  16,  17
+     [16.0, 0.005, 0.10, 24.0, 0.2, 0.8, 0.057, 0.389, 0.85, 0.95, 1.25, 0.06, -0.06, 700., 150., 0.7, 0.2, &! 1 = Needleleaf trees                      
+      16.0, 0.050, 0.10, 24.0, 0.2, 0.8, 0.057, 0.389, 1.10, 0.95, 1.25, 0.06, -0.06, 700., 150., 0.7, 0.2, &! 2 = Tropical forest trees,
+      16.0, 0.050, 0.10, 24.0, 0.2, 0.8, 0.057, 0.389, 0.90, 0.95, 1.25, 0.06, -0.06, 700., 150., 0.7, 0.2, &! 3 = Temperate broadleaf trees
+       1.0, 0.015, 0.10,  2.0, 0.2, 0.8, 0.057, 0.389, 0.85, 0.95, 1.00, 0.06, -0.06, 700., 150., 0.7, 0.2, &! 4 = shrubs
+       0.5, 0.010, 0.15,  0.5, 0.2, 0.8, 0.057, 0.389, 0.70, 0.95, 1.25, 0.06, -0.06, 700., 150., 0.7, 0.2, &! 5 = herbaceous
+       1.0, 0.020, 0.15,  1.0, 0.2, 0.8, 0.057, 0.389, 0.65, 0.95, 1.25, 0.06, -0.06, 700., 150., 0.7, 0.2 ]&! 6 = crops
+      ,shape=[NRCHA,NRTYP])
+  !--------------------------------------------------------
+
+  !MEGSEA.EXT data ----------------------------------------
+  !INTEGER, PARAMETER :: NrTyp = 6          ! Number of canopy types
+   REAL,PARAMETER :: d1 = 0.04
+                                                                                                                                                           
+   !-- WWLT is wilting point (M^3/M^3) (JN90)
+   REAL WWLT_JN90(16)
+   DATA WWLT_JN90 /  0.068, 0.075, 0.114, 0.179, 0.155, 0.175, 0.218, 0.250, 0.219, 0.283, 0.286, 0.286, 0.286, 0.286, 0.286, 0.286 /
+                                                                                                                                                           
+   !-- WWLT is wilting point (M^3/M^3) (NOAH LSM)
+   REAL  WWLT_NOAH(19)
+   DATA  WWLT_NOAH / 0.024, 0.057, 0.081, 0.123, 0.064, 0.128, 0.168, 0.212, 0.196, 0.239, 0.264, 0.285, 0.118, 0.066, 0.009, 0.049, 0.264, 0.009, 0.015 /
+  !--------------------------------------------------------
+
+  !MEGVEA.EXT data ----------------------------------------
+   ! CO2 related emission activity factor parameters
+   real,parameter :: CO2   = 400.0
+   real,parameter :: ISmax =   1.344
+   real,parameter :: CO2h  =   1.4614
+   real,parameter :: Cstar = 585.0
+
+   !AQI default:
+   real,parameter :: AQI_default=10
+   ! PSTD
+   REAL,PARAMETER :: PSTD = 200
+
+   ! canopy depth emission response
+   real,parameter :: CCD1 = -0.2
+   real,parameter :: CCD2 =  1.3
+
+   !Light and temperature emission activity response coefficients for each emission class
+   real LDF(NCLASS)  !LDF: light dependent fraction
+   real CT1(NCLASS)  !CT1: temperature coefficient (emission type 1: light dependent)
+   real Cleo(NCLASS) !Cleo: temperature coefficient (emission type 1: light dependent)
+   real beta(NCLASS) !beta: temperature coefficient (emission type 2: light independent)
+      DATA    beta(1),LDF(1),CT1(1),Cleo(1)        / 0.13,1.0,95,2    /
+      DATA    beta(2),LDF(2),CT1(2),Cleo(2)        / 0.13,1.0,95,2    /
+      DATA    beta(3),LDF(3),CT1(3),Cleo(3)        / 0.10,0.6,80,1.83 /
+      DATA    beta(4),LDF(4),CT1(4),Cleo(4)        / 0.10,0.9,80,1.83 /
+      DATA    beta(5),LDF(5),CT1(5),Cleo(5)        / 0.10,0.2,80,1.83 /
+      DATA    beta(6),LDF(6),CT1(6),Cleo(6)        / 0.10,0.4,80,1.83 /
+      DATA    beta(7),LDF(7),CT1(7),Cleo(7)        / 0.10,0.1,80,1.83 /
+      DATA    beta(8),LDF(8),CT1(8),Cleo(8)        / 0.10,0.0,80,1.83 /
+      DATA    beta(9),LDF(9),CT1(9),Cleo(9)        / 0.17,0.5,130,2.37/
+      DATA    beta(10),LDF(10),CT1(10),Cleo(10)    / 0.17,0.4,130,2.37/
+      DATA    beta(11),LDF(11),CT1(11),Cleo(11)    / 0.08,0.8,60,1.6  /
+      DATA    beta(12),LDF(12),CT1(12),Cleo(12)    / 0.10,0.2,80,1.83 /
+      DATA    beta(13),LDF(13),CT1(13),Cleo(13)    / 0.13,0.8,95,2    /
+      DATA    beta(14),LDF(14),CT1(14),Cleo(14)    / 0.13,0.8,95,2    /
+      DATA    beta(15),LDF(15),CT1(15),Cleo(15)    / 0.10,0.2,80,1.83 /
+      DATA    beta(16),LDF(16),CT1(16),Cleo(16)    / 0.10,0.2,80,1.83 /
+      DATA    beta(17),LDF(17),CT1(17),Cleo(17)    / 0.10,0.8,80,1.83 /
+      DATA    beta(18),LDF(18),CT1(18),Cleo(18)    / 0.10,0.1,80,1.83 /
+      DATA    beta(19),LDF(19),CT1(19),Cleo(19)    / 0.08,1.0,60,1.6  /
+
+   ! Parameters for leaf age algorithm for each emission activity classes
+   real Anew(NCLASS)
+   real Agro(NCLASS)
+   real Amat(NCLASS)
+   real Aold(NCLASS)
+      DATA  Anew( 1), Agro( 1), Amat( 1), Aold( 1) / 0.05 ,0.6, 1.0, 0.9  /
+      DATA  Anew( 2), Agro( 2), Amat( 2), Aold( 2) / 0.05 ,0.6, 1.0, 0.9  /
+      DATA  Anew( 3), Agro( 3), Amat( 3), Aold( 3) / 2.0  ,1.8, 1.0, 1.05 /
+      DATA  Anew( 4), Agro( 4), Amat( 4), Aold( 4) / 2.0  ,1.8, 1.0, 1.05 /
+      DATA  Anew( 5), Agro( 5), Amat( 5), Aold( 5) / 2.0  ,1.8, 1.0, 1.05 /
+      DATA  Anew( 6), Agro( 6), Amat( 6), Aold( 6) / 2.0  ,1.8, 1.0, 1.05 /
+      DATA  Anew( 7), Agro( 7), Amat( 7), Aold( 7) / 2.0  ,1.8, 1.0, 1.05 /
+      DATA  Anew( 8), Agro( 8), Amat( 8), Aold( 8) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew( 9), Agro( 9), Amat( 9), Aold( 9) / 0.4  ,0.6, 1.0, 0.95 /
+      DATA  Anew(10), Agro(10), Amat(10), Aold(10) / 0.4  ,0.6, 1.0, 0.95 /
+      DATA  Anew(11), Agro(11), Amat(11), Aold(11) / 3.5  ,3.0, 1.0, 1.2  /
+      DATA  Anew(12), Agro(12), Amat(12), Aold(12) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(13), Agro(13), Amat(13), Aold(13) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(14), Agro(14), Amat(14), Aold(14) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(15), Agro(15), Amat(15), Aold(15) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(16), Agro(16), Amat(16), Aold(16) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(17), Agro(17), Amat(17), Aold(17) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(18), Agro(18), Amat(18), Aold(18) / 1.0  ,1.0, 1.0, 1.0  /
+      DATA  Anew(19), Agro(19), Amat(19), Aold(19) / 1.0  ,1.0, 1.0, 1.0  /
+
+   !stress emission activity response coefficients for each emission class
+   REAL    CAQ(NCLASS)   !CAQ: coefficient for poor Air Quality stress
+   REAL    CHW(NCLASS)   !CHW: coefficient for high wind speed stress
+   REAL    CHT(NCLASS)   !CHT: coefficient for high temperature stress
+   REAL    CLT(NCLASS)   !CLT: coefficient for high temperature stress
+      DATA  CAQ(1) ,CHW(1) ,CHT(1) ,CLT(1)  / 1,1,1,1 /
+      DATA  CAQ(2) ,CHW(2) ,CHT(2) ,CLT(2)  / 1,1,1,1 /
+      DATA  CAQ(3) ,CHW(3) ,CHT(3) ,CLT(3)  / 1,5,1,1 /
+      DATA  CAQ(4) ,CHW(4) ,CHT(4) ,CLT(4)  / 5,5,5,5 /
+      DATA  CAQ(5) ,CHW(5) ,CHT(5) ,CLT(5)  / 1,5,1,1 /
+      DATA  CAQ(6) ,CHW(6) ,CHT(6) ,CLT(6)  / 1,5,1,1 /
+      DATA  CAQ(7) ,CHW(7) ,CHT(7) ,CLT(7)  / 1,5,1,1 /
+      DATA  CAQ(8) ,CHW(8) ,CHT(8) ,CLT(8)  / 1,1,1,1 /
+      DATA  CAQ(9) ,CHW(9) ,CHT(9) ,CLT(9)  / 5,5,5,5 /
+      DATA  CAQ(10),CHW(10),CHT(10),CLT(10) / 5,5,5,5 /
+      DATA  CAQ(11),CHW(11),CHT(11),CLT(11) / 1,1,1,1 /
+      DATA  CAQ(12),CHW(12),CHT(12),CLT(12) / 1,1,1,1 /
+      DATA  CAQ(13),CHW(13),CHT(13),CLT(13) / 1,1,1,1 /
+      DATA  CAQ(14),CHW(14),CHT(14),CLT(14) / 1,1,1,1 /
+      DATA  CAQ(15),CHW(15),CHT(15),CLT(15) / 1,1,1,1 /
+      DATA  CAQ(16),CHW(16),CHT(16),CLT(16) / 1,1,1,1 /
+      DATA  CAQ(17),CHW(17),CHT(17),CLT(17) / 5,5,5,5 /
+      DATA  CAQ(18),CHW(18),CHT(18),CLT(18) / 1,1,1,1 /
+      DATA  CAQ(19),CHW(19),CHT(19),CLT(19) / 1,1,1,1 /
+
+   REAL    TAQ(NCLASS)    !TAQ: threshold for poor Air Quality stress (ppm-hours)
+   REAL    THW(NCLASS)   !THW: threshold for high wind speed stress (m/s)
+   REAL    THT(NCLASS)   !THT: threshold for high temperature stress (Celsius degree)
+   REAL    TLT(NCLASS)   !TLT: threshold for high temperature stress (Celsius degree)
+      DATA TAQ(1),THW(1),THT(1),TLT(1)      / 20,12,40,10 /
+      DATA TAQ(2),THW(2),THT(2),TLT(2)      / 20,12,40,10 /
+      DATA TAQ(3),THW(3),THT(3),TLT(3)      / 20,12,40,10 /
+      DATA TAQ(4),THW(4),THT(4),TLT(4)      / 20,12,40,10 /
+      DATA TAQ(5),THW(5),THT(5),TLT(5)      / 20,12,40,10 /
+      DATA TAQ(6),THW(6),THT(6),TLT(6)      / 20,12,40,10 /
+      DATA TAQ(7),THW(7),THT(7),TLT(7)      / 20,12,40,10 /
+      DATA TAQ(8),THW(8),THT(8),TLT(8)      / 20,12,40,10 /
+      DATA TAQ(9),THW(9),THT(9),TLT(9)      / 20,12,40,10 /
+      DATA TAQ(10),THW(10),THT(10),TLT(10)  / 20,12,40,10 /
+      DATA TAQ(11),THW(11),THT(11),TLT(11)  / 20,12,40,10 /
+      DATA TAQ(12),THW(12),THT(12),TLT(12)  / 20,12,40,10 /
+      DATA TAQ(13),THW(13),THT(13),TLT(13)  / 20,12,40,10 /
+      DATA TAQ(14),THW(14),THT(14),TLT(14)  / 20,12,40,10 /
+      DATA TAQ(15),THW(15),THT(15),TLT(15)  / 20,12,40,10 /
+      DATA TAQ(16),THW(16),THT(16),TLT(16)  / 20,12,40,10 /
+      DATA TAQ(17),THW(17),THT(17),TLT(17)  / 20,12,40,10 /
+      DATA TAQ(18),THW(18),THT(18),TLT(18)  / 20,12,40,10 /
+      DATA    TAQ(19),THW(19),THT(19),TLT(19)       / 20,12,40,10 /
+
+    !stress emission activity delta thresholds for each emission class
+    !DTAQ: delta threshold for poor Air Quality stress (ppm-hours)
+    REAL           DTAQ(NCLASS)
+    !DTHW: delta threshold for high wind speed stress (m/s)
+    REAL           DTHW(NCLASS)
+    !DTHT: delta threshold for high temperature stress (Celsius degree)
+    REAL           DTHT(NCLASS)
+    !DTLT: delta threshold for low temperature stress (Celsius degree)
+    REAL           DTLT(NCLASS)
+      DATA  DTAQ(1) ,DTHW(1) ,DTHT(1) ,DTLT(1)   / 30,8,8,8 /
+      DATA  DTAQ(2) ,DTHW(2) ,DTHT(2) ,DTLT(2)   / 30,8,8,8 /
+      DATA  DTAQ(3) ,DTHW(3) ,DTHT(3) ,DTLT(3)   / 30,8,8,8 /
+      DATA  DTAQ(4) ,DTHW(4) ,DTHT(4) ,DTLT(4)   / 30,8,8,8 /
+      DATA  DTAQ(5) ,DTHW(5) ,DTHT(5) ,DTLT(5)   / 30,8,8,8 /
+      DATA  DTAQ(6) ,DTHW(6) ,DTHT(6) ,DTLT(6)   / 30,8,8,8 /
+      DATA  DTAQ(7) ,DTHW(7) ,DTHT(7) ,DTLT(7)   / 30,8,8,8 /
+      DATA  DTAQ(8) ,DTHW(8) ,DTHT(8) ,DTLT(8)   / 30,8,8,8 /
+      DATA  DTAQ(9) ,DTHW(9) ,DTHT(9) ,DTLT(9)   / 30,8,8,8 /
+      DATA  DTAQ(10),DTHW(10),DTHT(10),DTLT(10)  / 30,8,8,8 /
+      DATA  DTAQ(11),DTHW(11),DTHT(11),DTLT(11)  / 30,8,8,8 /
+      DATA  DTAQ(12),DTHW(12),DTHT(12),DTLT(12)  / 30,8,8,8 /
+      DATA  DTAQ(13),DTHW(13),DTHT(13),DTLT(13)  / 30,8,8,8 /
+      DATA  DTAQ(14),DTHW(14),DTHT(14),DTLT(14)  / 30,8,8,8 /
+      DATA  DTAQ(15),DTHW(15),DTHT(15),DTLT(15)  / 30,8,8,8 /
+      DATA  DTAQ(16),DTHW(16),DTHT(16),DTLT(16)  / 30,8,8,8 /
+      DATA  DTAQ(17),DTHW(17),DTHT(17),DTLT(17)  / 30,8,8,8 /
+      DATA  DTAQ(18),DTHW(18),DTHT(18),DTLT(18)  / 30,8,8,8 /
+      DATA  DTAQ(19),DTHW(19),DTHT(19),DTLT(19)  / 30,8,8,8 /
+
+  !--------------------------------------------------------
+
+  !MGN2MECH.EXT data --------------------------------------
+     INTEGER :: i_NO = 8                     ! this was 20 for megan 3.1 (older version)
+     REAL, PARAMETER :: nmol2mol   = 1E-9    ! convert nanomoles to moles
+  !--------------------------------------------------------
