@@ -35,7 +35,7 @@ MODULE MEGAN_V32
 
 contains
 
-subroutine megan (yyyy,ddd,hh,                             & !year,jday,hour
+subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
              ncols,nrows,layers,                           & !dimensions
              lat,long,                                     & !lat,lon,canopy fractions
              temp,rad,wind,pres,qv,                        & !meteo instant variables
@@ -1159,6 +1159,6 @@ function SvdTk(Tk)
 end function  SvdTk
 
 
-end subroutine megan
+end subroutine megan_voc
 
 END MODULE MEGAN_V32
