@@ -249,6 +249,7 @@ print*,"ny",g%ny
 print*,"times",g%nt,times
 
 end subroutine
+
 integer function get_t_index(times,current_date_s)
   implicit none
   integer :: i,secs,current_date_s!,get_t_index
