@@ -2,14 +2,17 @@ module nox_mod
 
 !include bdsnp_mod
 
+   INCLUDE 'tables/LSM.EXT'
+
 contains
 
-subroutine megan_nox(yyyy,ddd,hh, &
-           ncols,nrows,           &
-           lat,                   &
-           tmp,stemp,smois,styp,precadj,   &
-           ctf, lai,              &
-           no_emis                )
+subroutine megan_nox(yyyy,ddd,hh,       &
+           ncols,nrows,                 &
+           lat,                         &
+           tmp,precadj,                 &
+           lsm,styp,stemp,smois,        &
+           ctf, lai,                    &
+           no_emis                      )
 
   implicit none
   !input variables:
@@ -18,6 +21,8 @@ subroutine megan_nox(yyyy,ddd,hh, &
   real,   intent(in),dimension(nrows,ncols)   :: lat,tmp,stemp,smois,precadj,lai
   integer,intent(in),dimension(ncols,nrows)   :: styp
   real   ,intent(in),dimension(ncols,nrows,6) :: ctf 
+  character(len=4),intent(in)   :: LSM          !land surface model 
+
   !output variables:
   real, intent(inout) :: NO_EMIS(ncols,nrows)
 
@@ -30,10 +35,22 @@ subroutine megan_nox(yyyy,ddd,hh, &
   logical :: have_soil_fields
   real    :: TAIR,SMOI,TSOI,PRECI,LATI
   integer :: ISTYP,MAXSTYPES
-  real    :: WSAT   !ver como calcular!
+  real, allocatable :: wsat(:)    !ver como calcular!
 
   integer :: i,j,k,i_ct
   
+  select case (LSM)
+         case ('NOAH' )
+            allocate(wsat(size(wsat_noah))) ; wsat=wsat_noah;
+            !allocate(wwlt(size(wwlt_noah))); wwlt=wwlt_noah;
+         case ('JN90' )
+            allocate(wsat(size(wsat_px_wrfv4p))); wsat=wsat_px_wrfv4p;
+            !allocate(wwlt(size(wwlt_px_wrfv4p))); wwlt=wwlt_px_wrfv4p;
+         case DEFAULT
+            allocate(wsat(size(wsat_px_wrfv4p))); wsat=wsat_px_wrfv4p;
+  end select
+
+
   do i = 1,ncols
   do j = 1,nrows
 
@@ -51,7 +68,8 @@ subroutine megan_nox(yyyy,ddd,hh, &
        ISTYP = styp(i,j)   !  soil type
 
        !Check max bounds for temperature
-       IF (TAIR > 315.0 ) THEN; TAIR = 315.0; END IF; IF( TAIR > 303.00 ) TAIR = 303.00
+       IF (TAIR > 315.0 ) TAIR = 315.0
+       IF (TAIR > 303.0 ) TAIR = 303.0
 
        !Calculate CFG:
        IF ( TAIR > 268.8690 ) THEN
@@ -61,38 +79,40 @@ subroutine megan_nox(yyyy,ddd,hh, &
        END IF
        CFNOG = CFG
        !   pre calculate common factors
+       FAC1 = (TSOI- 273.16)
        FAC2 =  0.04550195 !const2=exp(-0.103 * 30.0)
 
        !Calculate CFNO
        IF( .NOT. have_soil_fields ) THEN !If soil fields aren't available (soil temp, wsat)
        ! no soil fields
           TSOI = 0.72 * TAIR + 82.28
-          IF (TSOI <= 273.16) TSOI = 273.16; IF (TSOI >= 303.16) TSOI = 303.16
-          FAC1 = (TSOI- 273.16)
-          CFNODRY = 0.01111111 * FAC1        !   (see YL 1995 Eq. 9a p. 11452)
+          IF (TSOI <= 273.16) TSOI = 273.16
+          IF (TSOI >= 303.16) TSOI = 303.16
+
+          CFNODRY = 0.01111111 * FAC1        !  (see YL 1995 Eq. 9a p. 11452)
           IF (TSOI <= 283.16) THEN           ! linear cold case
-              CFNOWET =  FAC1 * FAC2 * 0.28  !   (see YL 1995 Eq. 7b)
+              CFNOWET =  FAC1 * FAC2 * 0.28  !  (see YL 1995 Eq. 7b)
           ELSE                               ! exponential case
               CFNOWET = EXP(0.103 * FAC1) *  FAC2
           END IF
           CF = 0.5 * CFNOWET + 0.5 * CFNODRY
        ELSE
        ! soil fields available
-          IF (TSOI <= 273.16) TSOI = 273.16; IF (TSOI >= 303.16) TSOI = 303.16
-          FAC1 = (TSOI- 273.16)
-          CFNODRY = 0.01111111 * FAC1      !  (see YL 1995 Eq. 9a p. 11452)
+          IF (TSOI <= 273.16) TSOI = 273.16 
+          IF (TSOI >= 303.16) TSOI = 303.16
+          CFNODRY = 0.01111111 * FAC1      !   (see YL 1995 Eq. 9a p. 11452)
           IF (TSOI <= 283.16) THEN         ! linear cold case
-             CFNOWET = FAC1 * FAC2 * 0.28  !  (see YL 1995 Eq. 7b)
+             CFNOWET = FAC1 * FAC2 * 0.28  !   (see YL 1995 Eq. 7b)
           ELSE                             ! exponential case
              CFNOWET = EXP(0.103 * FAC1 ) * FAC2
           END IF
           
           IF( ISTYP > 0 .AND. ISTYP <= MAXSTYPES ) THEN
-             IF( WSAT .eq. 0) THEN
+             IF( WSAT(ISTYP) .eq. 0) THEN
                ! first ldesid diag call. Do nothing.
                CF = 0.
              ELSE
-               RATIO = SMOI / WSAT
+               RATIO = SMOI / WSAT(ISTYP)
                CF = RATIO * CFNOWET + (1.0 - RATIO ) * CFNODRY
              END IF
           ELSE
@@ -100,8 +120,8 @@ subroutine megan_nox(yyyy,ddd,hh, &
           END IF
        END IF  ! endif have_soil_fields
                                                                                         
-       CFNO = CF * FERTLZ_ADJ(GDAY,GLEN) * VEG_ADJ(LAI(i,j)) * PRECADJ(i,j)
-       if(cfno      .lt. 0) then; cfno      = 0; end if
+       CFNO = CF * FERTLZ_ADJ(gday,glen) * VEG_ADJ(lai(i,j)) * PRECADJ(i,j)
+       if( CFNO .lt. 0 ) then; CFNO = 0; end if
       !>>ENDSOILNOX
 
        IF (GDAY .EQ. 0) THEN

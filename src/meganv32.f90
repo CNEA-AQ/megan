@@ -49,8 +49,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     ! input variables
     integer, intent(in)                           :: yyyy, ddd, hh           ! year, jday, hour
     integer, intent(in)                           :: ncols, nrows, layers    !dims x,y,levels
-    real,intent(in), dimension(ncols,nrows)       :: lat, long, temp, rad, wind, pres, qv, laip,laic
-    real,intent(in), dimension(ncols,nrows)       :: tmp_avg,rad_avg,tmp_min,tmp_max,wind_max
+    real,    intent(in), dimension(ncols,nrows)   :: lat, long, temp, rad, wind, pres, qv, laip,laic
+    real,    intent(in), dimension(ncols,nrows)   :: tmp_avg,rad_avg,tmp_min,tmp_max,wind_max
 
     real, intent(in) :: ctf(ncols,nrows,nrtyp) !canopy type factor array
     real, intent(in) :: efmaps(ncols,nrows,19) !only 19
