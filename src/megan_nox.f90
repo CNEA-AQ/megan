@@ -1,4 +1,4 @@
-module megan_nox_mod
+module nox_mod
 
 !include bdsnp_mod
 
@@ -7,115 +7,122 @@ contains
 subroutine megan_nox(yyyy,ddd,hh, &
            ncols,nrows,           &
            lat,                   &
-           tmp,stmp,smois,styp,   &
+           tmp,stemp,smois,styp,precadj,   &
            ctf, lai,              &
            no_emis                )
 
   implicit none
-  logical :: bdsnp_megan=.false.
-
   !input variables:
   integer, intent(in) :: yyyy,ddd,hh
   integer, intent(in) :: ncols,nrows
-  !real   ,intent(in),dimension(ncols,nrows)   :: lat,long, smois,stmp,lai
+  real,   intent(in),dimension(nrows,ncols)   :: lat,tmp,stemp,smois,precadj,lai
+  integer,intent(in),dimension(ncols,nrows)   :: styp
   real   ,intent(in),dimension(ncols,nrows,6) :: ctf 
-  integer,intent(in),dimension(ncols,nrows,)  :: styp
-  !input vars
-   REAL, INTENT (IN)  ::  TA      (nrows,ncols) !  air temperature (K)
-   REAL, INTENT (IN)  ::  SOILM   (nrows,ncols) !  soil moisture (m3/m3)
-   REAL, INTENT (IN)  ::  SOILT   (nrows,ncols) !  soil temperature (K)
-   REAL, INTENT (IN)  ::  PRECADJ (nrows,ncols) !  precip adjustment
-   REAL, INTENT (IN)  ::  LAIc    (nrows,ncols) !  soil temperature (K)
-   REAL, INTENT (IN)  ::  LAT     (nrows,ncols) !  Latitude
+  !output variables:
+  real, intent(inout) :: NO_EMIS(ncols,nrows)
 
   !local variables:
-  REAL  ::  CFNO     !  NO correction factor
-  REAL  ::  CFNOG    !  NO correction factor for grass
+  REAL :: CFNO     !  NO correction factor
+  REAL :: CFNOG    !  NO correction factor (for grass)
+  real :: fac1,fac2,tmo1,tmo2,ratio
+  real :: CFNOWET,CFNODRY,CF,CFG
+  integer :: gday,glen
+  logical :: have_soil_fields
+  real    :: TAIR,SMOI,TSOI,PRECI,LATI
+  integer :: ISTYP,MAXSTYPES
+  real    :: WSAT   !ver como calcular!
 
+  integer :: i,j,k,i_ct
+  
   do i = 1,ncols
   do j = 1,nrows
 
-    call growseason(yyyy,ddd,lat(i,j),gday,glen)
+      call growseason(yyyy,ddd,lat(i,j),gday,glen)
+      ! CALL SOILNOX(yyyy,ddd,                 &
+      !       TEMP,have_soil_fields,SLTYP,SOILM1, SOILT,  &
+      !       LAIc, LAT, PRECADJ,              &
+      !       CFNO, CFNOG                      )
+      !>>SOILNOX:
+       TAIR  =   tmp(i,j)  !  air temperature (K)
+       SMOI  = smois(i,j)  !  soil moisture (m3/m3)
+       TSOI  = stemp(i,j)  !  soil temperature (K)
+       PRECI = precadj(i,j)!  precip adjustment
+       LATI  = lat(i,j)    !  latitude
+       ISTYP = styp(i,j)   !  soil type
 
-    ! CALL SOILNOX(yyyy,ddd,                 &
-    !       TEMP,LSOIL,SLTYP,SOILM1, SOILT,  &
-    !       LAIc, LAT, PRECADJ,              &
-    !       CFNO, CFNOG                      )
-    !SOILNOX:
-     TAIR = TA( i,j )  ! [ºK]
-     !.......  Check max bounds for temperature
-     IF (TAIR > 315.0 ) THEN; TAIR = 315.0; END IF; IF( TAIR > 303.00 ) TAIR = 303.00
-     !Calculate CFG:
-     IF ( TAIR > 268.8690 ) THEN
-         CFG = EXP( 0.04686 * TAIR - 14.30579 ) ! grass (from BEIS2)
-     ELSE
-         CFG = 0.0
-     END IF
-     CFNOG(i,j) = CFG
-     !   pre calculate common factors
-     FAC2 = const2
-     !.......  CFNO
-     IF( .NOT. LSOIL ) THEN !If soil fields aren't available (soil temp, wsat)
-     ! no soil fields
-        TSOI = 0.72 * TAIR + 82.28
-        IF (TSOI <= 273.16) TSOI = 273.16; IF (TSOI >= 303.16) TSOI = 303.16
-        FAC1 = (TSOI- 273.16)
-        CFNODRY = const1 * FAC1  ! see YL 1995 Equa 9a p. 11452
-        IF (TSOI <= 283.16) THEN         ! linear cold case
-            CFNOWET =  FAC1 * FAC2 * 0.28 ! see YL 1995 Equ 7b
-        ELSE                             ! exponential case
-            CFNOWET = EXP(0.103 * FAC1) *  FAC2
-        END IF
-        CF = 0.5 * CFNOWET + 0.5 * CFNODRY
-     ELSE
-     ! soil fields available
-        TSOI = SOILT( i,j )
-        IF (TSOI <= 273.16) TSOI = 273.16
-        IF (TSOI >= 303.16) TSOI = 303.16
-        FAC1 = (TSOI- 273.16)
-        CFNODRY = const1 * FAC1  ! see YL 1995 Equa 9a p. 11452
-        IF (TSOI <= 283.16) THEN         ! linear cold case
-           CFNOWET = FAC1 * FAC2 * 0.28 ! see YL 1995 Equ 7b
-        ELSE                             ! exponential case
-           CFNOWET = EXP(0.103 * FAC1 ) * FAC2
-        END IF
-        SOILCAT = INT( ISLTYP( i,j ) )
-        IF( SOILCAT > 0 .AND. SOILCAT <= MAXSTYPES ) THEN
-           IF(Grid_Data%WSAT(i,j) .eq. 0) THEN
-            ! first ldesid diag call. Do nothing.
-            CF = 0.
-           ELSE
-            RATIO = SOILM( i,j ) / Grid_Data%WSAT( i,j )
-            CF = RATIO * CFNOWET + (1.0 - RATIO ) * CFNODRY
-           END IF
-        ELSE
-            CF = 0.0
-        END IF
-     END IF  ! endif lsoil
-                                                                                      
-     CFNO(i,j) = CF * FERTLZ_ADJ(GDAY,GLEN) * VEG_ADJ(LAIc(i,j)) * PRECADJ(i,j)
-     if(cfno(i,j) .lt. 0) then; cfno(i,j) = 0; end if
-    !ENDSOILNOX
+       !Check max bounds for temperature
+       IF (TAIR > 315.0 ) THEN; TAIR = 315.0; END IF; IF( TAIR > 303.00 ) TAIR = 303.00
 
-     IF (GDAY .EQ. 0) THEN
-        GAMNO(I,J) = CFNOG(I,J) ! non growing season ! CFNOG for everywhere
+       !Calculate CFG:
+       IF ( TAIR > 268.8690 ) THEN
+           CFG = EXP( 0.04686 * TAIR - 14.30579 ) ! grass (from BEIS2)
+       ELSE
+           CFG = 0.0
+       END IF
+       CFNOG = CFG
+       !   pre calculate common factors
+       FAC2 =  0.04550195 !const2=exp(-0.103 * 30.0)
 
-     ELSE IF (GDAY .GT. 0 .AND. GDAY .LE. 366) THEN
-        ! growing season     ! CFNOG for everywhere except crops
-        TMO1 = 0.0; TMO2 = 0.0
-        DO I_CT=1,5
-          TMO1 = TMO1 + CTF(I,J,I_CT)
-          TMO2 = TMO2 + CTF(I,J,I_CT) * CFNOG(I,J)
-        ENDDO
-        ! CFNO for crops
-        TMO1 = TMO1 + CTF(I,J,6)
-        TMO2 = TMO2 + CTF(I,J,6) * CFNO(I,J)
-        IF (TMO1 .EQ. 0.0) THEN
-           GAMNO(I,J) = 0.0
-        ELSE
-           GAMNO(I,J) = TMO2 / TMO1
-        ENDIF
-     ENDIF
+       !Calculate CFNO
+       IF( .NOT. have_soil_fields ) THEN !If soil fields aren't available (soil temp, wsat)
+       ! no soil fields
+          TSOI = 0.72 * TAIR + 82.28
+          IF (TSOI <= 273.16) TSOI = 273.16; IF (TSOI >= 303.16) TSOI = 303.16
+          FAC1 = (TSOI- 273.16)
+          CFNODRY = 0.01111111 * FAC1        !   (see YL 1995 Eq. 9a p. 11452)
+          IF (TSOI <= 283.16) THEN           ! linear cold case
+              CFNOWET =  FAC1 * FAC2 * 0.28  !   (see YL 1995 Eq. 7b)
+          ELSE                               ! exponential case
+              CFNOWET = EXP(0.103 * FAC1) *  FAC2
+          END IF
+          CF = 0.5 * CFNOWET + 0.5 * CFNODRY
+       ELSE
+       ! soil fields available
+          IF (TSOI <= 273.16) TSOI = 273.16; IF (TSOI >= 303.16) TSOI = 303.16
+          FAC1 = (TSOI- 273.16)
+          CFNODRY = 0.01111111 * FAC1      !  (see YL 1995 Eq. 9a p. 11452)
+          IF (TSOI <= 283.16) THEN         ! linear cold case
+             CFNOWET = FAC1 * FAC2 * 0.28  !  (see YL 1995 Eq. 7b)
+          ELSE                             ! exponential case
+             CFNOWET = EXP(0.103 * FAC1 ) * FAC2
+          END IF
+          
+          IF( ISTYP > 0 .AND. ISTYP <= MAXSTYPES ) THEN
+             IF( WSAT .eq. 0) THEN
+               ! first ldesid diag call. Do nothing.
+               CF = 0.
+             ELSE
+               RATIO = SMOI / WSAT
+               CF = RATIO * CFNOWET + (1.0 - RATIO ) * CFNODRY
+             END IF
+          ELSE
+             CF = 0.0
+          END IF
+       END IF  ! endif have_soil_fields
+                                                                                        
+       CFNO = CF * FERTLZ_ADJ(GDAY,GLEN) * VEG_ADJ(LAI(i,j)) * PRECADJ(i,j)
+       if(cfno      .lt. 0) then; cfno      = 0; end if
+      !>>ENDSOILNOX
+
+       IF (GDAY .EQ. 0) THEN
+          NO_EMIS(i,j) = CFNOG      ! non growing season ! CFNOG for everywhere
+
+       ELSE IF (GDAY .GT. 0 .AND. GDAY .LE. 366) THEN
+          ! growing season     ! CFNOG for everywhere except crops
+          TMO1 = 0.0; TMO2 = 0.0
+          DO I_CT=1,5
+            TMO1 = TMO1 + CTF(i,j,I_CT)
+            TMO2 = TMO2 + CTF(i,j,I_CT) * CFNOG
+          ENDDO
+          ! CFNO for crops
+          TMO1 = TMO1 + CTF(I,J,6)
+          TMO2 = TMO2 + CTF(I,J,6) * CFNO
+          IF (TMO1 .EQ. 0.0) THEN
+             NO_EMIS(i,j) = 0.0
+          ELSE
+             NO_EMIS(i,j) = TMO2 / TMO1
+          ENDIF
+       ENDIF
 
   enddo  !ncols
   enddo  !nrows
@@ -155,14 +162,14 @@ subroutine megan_nox(yyyy,ddd,hh, &
  end function veg_adj
 
 !!MEJORAR ESTA FUNCIÓN!!
-subroutine growseason (year,jday, lat, gday, glen)                 
+subroutine growseason (year,jday,lat,gday,glen)
 !!MEJORAR ESTA FUNCIÓN!!
    !  This internal function computes the day of the growing season
    !  corresponding to the given date in yyyyddd format.
       implicit none                                  !   NOTE: The use of "julian Day" to describe the day of tHE year is
-      integer, intent(in :: year,jday,lat            !     technically incorrect. 
+      integer, intent(in)  :: year,jday              !     technically incorrect. 
       integer, intent(out) :: gday, glen             ! The Julian Day Number (JDN) is the integer assigned to a whole solar 
-                                                     ! day in the Julian day count starting from noon Universal time, with 
+      real,    intent(in)  :: lat                    ! day in the Julian day count starting from noon Universal time, with 
                                                      ! Julian day number 0 assigned to the day starting at noon on Monday, 
       integer            :: gseason_start            ! January 1, 4713 BCE, proleptic Julian calendar (November 24, 4714 BCE, 
       integer            :: gseason_end              ! in the proleptic Gregorian calendar), a date at which three 
@@ -201,20 +208,20 @@ subroutine growseason (year,jday, lat, gday, glen)
             GSEASON_START = 089+extra_day  !GSEASON_START = INT( (LAT-23.0) * 4.5 )
             GSEASON_END   = 226+extra_day  !GSEASON_END   = GSJULIAN_END - INT( (LAT-23.0) * 3.3 )
 
-            GDAY=jday-GSEASON_START; GLEN = GSJULIAN_END - GSJULIAN_START + 1
+            GDAY=jday-GSEASON_START; GLEN = GSEASON_END - GSEASON_START + 1
          ENDIF
       ENDIF
      RETURN
 end subroutine growseason
 
-
 end subroutine megan_nox
 
+end module nox_mod
 
 
 !SUBROUTINE SOILNOX( yyyy,ddd,hh,                 &
 !                nrows,ncols,                     &
-!                TA, LSOIL, ISLTYP, SOILM, SOILT, &
+!                TA, have_soil_fields, ISLTYP, SOILM, SOILT, &
 !                LAIc, LAT,                       &
 !                PRECADJ,                         &
 !                CFNO, CFNOG )
@@ -233,7 +240,7 @@ end subroutine megan_nox
 !
 !        INTEGER, INTENT (IN)  ::  ISLTYP  (nrows,ncols)    !  soil type
 !
-!        LOGICAL, INTENT (IN) :: LSOIL              ! true: using PX version of MCIP
+!        LOGICAL, INTENT (IN) :: have_soil_fields              ! true: using PX version of MCIP
 !
 !        !.........  Local ARRAYS
 !        ! Saturation values for 11 soil types from pxpbl.F  (MCIP PX version)
@@ -272,7 +279,7 @@ end subroutine megan_nox
 !             !   pre calculate common factors
 !             FAC2 = const2
 !             !.......  CFNO
-!             IF( .NOT. LSOIL ) THEN
+!             IF( .NOT. have_soil_fields ) THEN
 !             ! no soil
 !                TSOI = 0.72 * TAIR + 82.28
 !                IF (TSOI <= 273.16) TSOI = 273.16; IF (TSOI >= 303.16) TSOI = 303.16
@@ -308,7 +315,7 @@ end subroutine megan_nox
 !                ELSE
 !                    CF = 0.0
 !                END IF
-!             END IF  ! Endif LSOIL
+!             END IF  ! Endif have_soil_fields
 !
 !             CFNO(i,j) = CF * FERTLZ_ADJ(GDAY,GLEN) * VEG_ADJ(LAIc(i,j)) * PRECADJ(i,j)
 !             if(cfno(i,j) .lt. 0) then; cfno(i,j) = 0; end if

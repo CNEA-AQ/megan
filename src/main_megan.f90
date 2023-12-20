@@ -5,13 +5,14 @@ program main
    ! adapted by:  Ramiro Espada (date: 11/2023)
 
    use netcdf   
-   use megan_v32     !megan module: (megan_voc)
-   !use bdsnp         !megan module: (megan_voc)
+   use megan_v32  !megan module: (megan_voc)
+   use nox_mod   !megan module: (megan_nox)
+   !use bdsnp     !megan module: (bdsnp_nox)
    
    implicit none
 
    type grid_type
-       integer         :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
+       integer  :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
    end type grid_type
 
    type(grid_type) :: grid
@@ -128,6 +129,7 @@ print*,"t = ",t
          endif    
       endif    
 
+      !MEGAN VOCs model
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),     &
               grid%nx,grid%ny,layers,                   &  !dimensions
               lat,lon,                                  &
@@ -140,11 +142,16 @@ print*,"t = ",t
               out_buffer(:,:,:,atoi(HH))                )  !Emis array
 
       !soil NO model:
-      !call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh), 
-      !       gamma_no, bdsnp_no                                          ) !Outs: Final NO emission activity BDSNP NO emissions(nmol/s/m2)
-      !ctf(:,:,1,:),lai,                               & !Soil type, CTF, LAIc
-      !tmp(:,:,t),soilm1(:,:,t),soilm2(:,:,t),soilt(:,:,t),precadj(:,:,t),  &  !temp, soil moisture, soil temp, precip adjustment
-      !cfno, cfnog, gamma_sm)                                      & !Outs: Emiss activity (EA) of Crop & EA Grass, Soil moisture for isoprene
+      !if ( bdnsp_soil_model ) then
+      !    call bdsnp_nox()
+      !else
+         call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),     &
+                        grid%nx,grid%ny,                   &
+                        lat,                               &
+                        tmp,stmp,smois(:,:,t),styp(:,:,t), &
+                        ctf(:,:,1,:), lai,                 &
+                        out_buffer(:,:,8, atoi(HH))        )
+      !endif
 
      !laip=laic
      !----

@@ -7,7 +7,7 @@ INC =-I/usr/include
 FCFLAGS=-O2 -ffree-line-length-none #-Wall#-Wunused 
 LDFLAGS=-O2
 
-OBJS=meganv32.o main_megan.o #module_utils.o module_proj.o 
+OBJS=meganv32.o megan_nox.o main_megan.o #bdsnp.o
 EXE =meganv3.2.exe
 
 $(EXE): $(OBJS)
