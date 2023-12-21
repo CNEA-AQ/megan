@@ -1,108 +1,84 @@
 module bdsnp_mod
-! Adopted from CMAQ files and modified for MEGAN3.1 by Ling Huang
-! 2019/07/15
-! Adopted from MEGAN3.1 and modified for CMAQ 5.4 by Jeff Willison
+  ! Adopted from CMAQ files and modified for MEGAN3.1 by Ling Huang
+  ! 2019/07/15
+  ! Adopted from MEGAN3.1 and modified for CMAQ 5.4 by Jeff Willison
 
-  !use centralized_io_util_module
-  !use hgrd_defn
-  !use asx_data_mod, only: met_data,grid_data
-  !use runtime_vars, only: new_start, px_lsm, mgn_onln_dep, ignore_soilinp
   use netcdf
   implicit none
   ! Parameters:
   ! Value calculated by running the 2x2.5 GEOS-Chem model
-  REAL*8,  PARAMETER :: TAU_MONTHS   = 6. ! this is the decay time for dep. N reservoir, fert is 4 months
-  REAL*8,  PARAMETER :: SECPERDAY    = 86400.d0
-  REAL*8,  PARAMETER :: DAYSPERMONTH = 30.
-  REAL*8,  PARAMETER :: TAU_SEC      = TAU_MONTHS * DAYSPERMONTH * SECPERDAY
+  real*8,  parameter :: tau_months   = 6. ! this is the decay time for dep. n reservoir, fert is 4 months
+  real*8,  parameter :: secperday    = 86400.d0
+  real*8,  parameter :: dayspermonth = 30.
+  real*8,  parameter :: tau_sec      = tau_months * dayspermonth * secperday
   
   ! New soil biomes based on Steinkamp et al., 2011
-  INTEGER, PARAMETER :: NSOIL    = 24
+  integer, parameter :: nsoil    = 24
  
   ! Canopy wind extinction coefficients
   ! (cf. Yienger & Levy [1995], Sec 5), now a function of the MODIS/KOPPEN biometype (J.D. Maasakkers)
-  REAL*8, PARAMETER :: SOILEXC(NSOIL) = [0.10, 0.50, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 1.00, 1.00, 1.00, 1.00, 2.00, 4.00, 4.00, 4.00, 4.00, 4.00, 4.00, 4.00, 2.00, 0.10, 2.00]
+  real*8, parameter :: soilexc(nsoil) = [0.10, 0.50, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 1.00, 1.00, 1.00, 1.00, 2.00, 4.00, 4.00, 4.00, 4.00, 4.00, 4.00, 4.00, 2.00, 0.10, 2.00]
   ! Steinkamp and Lawrence, 2011 A values, wet biome coefficients
   ! for each of the 24 soil biomes [ng N/m2/s] 
-  REAL*8, PARAMETER :: A_BIOME(NSOIL) = [0.00, 0.00, 0.00, 0.00, 0.00, 0.06, 0.09, 0.09, 0.01, 0.84, 0.84, 0.24, 0.42, 0.62, 0.03, 0.36, 0.36, 0.35, 1.66, 0.08, 0.44, 0.57, 0.57, 0.57]
+  real*8, parameter :: a_biome(nsoil) = [0.00, 0.00, 0.00, 0.00, 0.00, 0.06, 0.09, 0.09, 0.01, 0.84, 0.84, 0.24, 0.42, 0.62, 0.03, 0.36, 0.36, 0.35, 1.66, 0.08, 0.44, 0.57, 0.57, 0.57]
   ! Saturation values from ASX. For PX see:
   ! Jacquemin B. and Noilhan J. (1990), Bound.-Layer Meteorol., 52, 93-134.
 
 contains
 
-subroutine megan_nox( yyyy,ddd,hh,                  &
+subroutine bdsnp_nox( yyyy,ddd,hh,                  &
                       ncols,nrows,                  &  
-             L_DESID_DIAG, SOILM, SOILT, RSTYP,LAI, &
-                       BDSNP_NO )
-
-     ! USE centralized_io_module, only: bdsnp_ndep,bdsnp_landtype,
-     !&                                 bdsnp_arid,bdsnp_nonarid,bdsnp_fert,
-     !&                                 soilmprev,ndepres,ndeprate,dryperiod,pfactor
+                      L_DESID_DIAG, SOILM, SOILT, RSTYP,LAI, &
+                      FERT,NDEP,ARID,NONARID,LANDTYPE        &
+                      CFRAC,TEMP,PPFD,                       &
+                      BDSNP_NO )
      implicit none
-     ! Arguments:
-     !Input vars:
-     integer ::yyyy,ddd,hh
-      LOGICAL, INTENT( IN ) :: L_DESID_DIAG
-      INTEGER, INTENT( IN ) :: RSTYP  ( NCOLS,NROWS )        ! soil type
-      REAL,    INTENT( IN ) :: SOILM ( NCOLS,NROWS )         ! soil moisture [m3/m3] (PX)
-      REAL,    INTENT( IN ) :: SOILT  ( NCOLS,NROWS )        ! soil temperature [K] (PX)
-      REAL,    INTENT( IN ) :: LAI  ( NCOLS,NROWS )        ! leaf area index (m2/m2)
-      REAL,    INTENT( OUT ) :: BDSNP_NO ( NCOLS,NROWS ) ! output NO emissions in nanomol/m^2/s
-
-     ! Local Variables:
-      CHARACTER( 16 ), SAVE :: SOILINSTATE = 'SOILINSTATE' ! logical name for input NO soil data, restart file
-      CHARACTER( 16 ), SAVE :: SOILOUT = 'BDSNPOUT' ! logical name for output NO soil data - same format as soilinstate
-      integer, save :: output_step, half_syn_step  ! values are in seconds
-      CHARACTER (20) :: TIME_STAMP
+     !input vars:
+      integer, intent(in) ::   yyyy,ddd,hh
+      integer, intent(in) ::   ncols,nrows
+      integer, intent(in) ::   CFRAC(ncols,nrows) ! cloud fraction
+      integer, intent(in) ::   RSTYP(ncols,nrows) ! soil type
+      real,    intent(in) ::   SOILM(ncols,nrows) ! soil moisture [m3/m3] (PX)
+      real,    intent(in) ::   SOILT(ncols,nrows) ! soil temperature [K] (PX)
+      real,    intent(in) ::     LAI(ncols,nrows) ! leaf area index (m2/m2)
+      real,    intent(in) ::    FERT(ncols,nrows) ! "ng N m-2" already - reservoir
+      real,    intent(in) ::    NDEP(ncols,nrows) ! 
+      integer, intent(in) ::    ARID(ncols,nrows) ! 
+      integer, intent(in) :: NONARID(ncols,nrows) ! 
+      integer, intent(in) ::LANDTYPE(ncols,nrows) ! 
+      logical, intent(in) :: L_DESID_DIAG
+     !output var:
+      REAL,    INTENT(OUT) :: BDSNP_NO (NCOLS,NROWS) ! output NO emissions in nanomol/m^2/s
 
      ! Land use files for BDSNP: both time independant in CMAQ sense and absolutely - e.g. fertilizer does not vary with year
-      CHARACTER( 16 ) :: VAR        ! variable name
-
-      REAL,    ALLOCATABLE, SAVE :: FERT     ( :,: )  ! "ng N m-2" already - reservoir
      ! Gridded Canopy NOx reduction factor for BDSNP Soil NO calculations
-      REAL,    ALLOCATABLE, SAVE :: CRF   ( :,: )     ! 0-1
-      REAL,    ALLOCATABLE, SAVE :: CFRAC ( :,: )  ! 0-1
+      REAL, ALLOCATABLE, SAVE :: CRF   ( :,: )     ! 0-1
+      REAL, ALLOCATABLE, SAVE :: CFRAC ( :,: )     ! 0-1
      ! --- diagnostic variables, can be removed in final version      
-      REAL,    ALLOCATABLE, SAVE :: CRFAVG   ( :,: )  ! 0-1
-      REAL,    ALLOCATABLE, SAVE :: PULSEAVG   ( :,: )  ! 1+
-      REAL,    ALLOCATABLE, SAVE :: BASESUM   ( :,: )  ! used in calculating the above two averages
-      REAL,    ALLOCATABLE, SAVE :: THETA_DIAG( :,: )  ! diagnositc theta
-      REAL,    ALLOCATABLE, SAVE :: WET_DIAG ( :,: )  ! diagnositc wet term
-      REAL,    ALLOCATABLE, SAVE :: TEMP_DIAG ( :,: )  ! diagnositc temp term
-      REAL,    ALLOCATABLE, SAVE :: A_DIAG ( :,: )  ! diagnositc biome base emissions term
-      REAL,    ALLOCATABLE, SAVE :: AFERT_DIAG ( :,: )  ! diagnositc fert emissions term
-      REAL,    ALLOCATABLE, SAVE :: NRES_FERT_DIAG ( :,: )  ! diagnositc nres fert
-      REAL,    ALLOCATABLE, SAVE :: NRES_DEP_DIAG ( :,: )  ! diagnositc nres  dep    
+      REAL, ALLOCATABLE, SAVE :: CRFAVG     ( :,: )  ! 0-1
+      REAL, ALLOCATABLE, SAVE :: PULSEAVG   ( :,: )  ! 1+
+      REAL, ALLOCATABLE, SAVE :: BASESUM    ( :,: )  ! used in calculating the above two averages
+      REAL, ALLOCATABLE, SAVE :: THETA_DIAG ( :,: )  ! diagnositc theta
+      REAL, ALLOCATABLE, SAVE :: WET_DIAG   ( :,: )  ! diagnositc wet term
+      REAL, ALLOCATABLE, SAVE :: TEMP_DIAG  ( :,: )  ! diagnositc temp term
+      REAL, ALLOCATABLE, SAVE :: A_DIAG     ( :,: )  ! diagnositc biome base emissions term
+      REAL, ALLOCATABLE, SAVE :: AFERT_DIAG ( :,: )  ! diagnositc fert emissions term
+      REAL, ALLOCATABLE, SAVE :: NRES_FERT_DIAG ( :,: )  ! diagnositc nres fert
+      REAL, ALLOCATABLE, SAVE :: NRES_DEP_DIAG ( :,: )  ! diagnositc nres  dep    
      ! ---------------------------------------------------------------------------      
-      REAL,                 SAVE :: EMPOL,EMPOLSUM, EMPOLAVG       ! use to check reasonableness of results, g/hr
-      REAL,                 SAVE :: TIMECHECK ! use to output CPU_TIME(TIMECHECK) to see if this section of code is running unreasonably long
-      
-      INTEGER,              SAVE :: EDATE     ! end scenario date
-      INTEGER,              SAVE :: ETIME     ! end scenario time
-      INTEGER,              SAVE :: NDATE     ! test date to update rainfall
-      INTEGER,              SAVE :: NTIME     ! test time to update rainfall
-      INTEGER,              SAVE :: SDATE     ! scenario start date
-      INTEGER,              SAVE :: STIME     ! scenario start time
-        
-      LOGICAL, SAVE :: PX_VERSION         ! true: use PX version of MCIP; should always be true
+      REAL,              SAVE :: EMPOL,EMPOLSUM, EMPOLAVG       ! use to check reasonableness of results, g/hr
+      REAL,              SAVE :: TIMECHECK ! use to output CPU_TIME(TIMECHECK) to see if this section of code is running unreasonably long
 
       INTEGER          SOILCAT            ! soil category
       INTEGER          NSTEPS             ! run duration (HHMMSS)
       INTEGER, SAVE :: MSTEPS             ! run no. of steps
       INTEGER          I, J, K, R, C, L   ! counters
-      CHARACTER*3      CHARDAY
-      CHARACTER*2      CHARMON
-      LOGICAL          OK
-      INTEGER          IOS                ! IO or memory allocation status
       !ACA TOCO RAMI
       integer :: ierr, ncid, col_dim_id,row_dim_id, var_id
       !ACA TOCO RAMI
       
 !      REAL,    SAVE :: EFAC
-       REAL            TEMP_TERM
-       REAL            WET_TERM
-       REAL            PULSE
-       REAL            A_FERT
+       REAL            TEMP_TERM, WET_TERM, PULSE, A_FERT
        REAL            CRF_TERM
        REAL            SOILNOX, FERTDIAG
 !      REAL             CFNO               ! NO correction factor
@@ -113,18 +89,7 @@ subroutine megan_nox( yyyy,ddd,hh,                  &
        REAL             THETAPREV
 !      REAL             CFNOWET,  THETA
 !      REAL             FAC1, FAC2, FAC3, FAC4
-
-      LOGICAL, SAVE :: USE_SOILT = .TRUE. ! use soil temperature in PX version
-                                          ! rather than estimate as in BEIS2
-
-      LOGICAL, SAVE :: FIRSTIME = .TRUE.
-      CHARACTER( 256 ) :: MESG            ! message buffer
-      CHARACTER( 16 )  :: PNAME = 'BDSNPHRNO'  ! procedure name
-
 !-----------------------------------------------------------------------
-      IF ( FIRSTIME ) THEN
-
-         FIRSTIME = .FALSE.
          ! we need to initialize and allocate:
          ! pulse
          ! length of dry period
@@ -134,177 +99,106 @@ subroutine megan_nox( yyyy,ddd,hh,                  &
          ! This means CMAQ isn't checking to see if the restart file is actually from
          ! the immediately prior timstep.
 
-! Determine last timestamp
-         EDATE = STDATE; ETIME = STTIME
-         CALL NEXTIME( EDATE, ETIME, RUNLEN )   ! end date & time
-! Allocate memory for data and read
-             output_step   = time2sec(tstep(1))
-             half_syn_step = time2sec(tstep(2)) / 2
-         allocate(FERT( NCOLS,NROWS ), STAT=IOS );      call checkmem( IOS, 'FERT', PNAME )
-         allocate(CFRAC( NCOLS,NROWS ), STAT=IOS );     call checkmem( IOS, 'CFRAC', PNAME )
-         allocate(CRF( NCOLS,NROWS ), STAT=IOS );       call checkmem( IOS, 'CRF', PNAME )
-         allocate(CRFAVG( NCOLS,NROWS ), STAT=IOS );    call checkmem( IOS, 'CRFAVG', PNAME )
-         allocate(PULSEAVG( NCOLS,NROWS ), STAT=IOS );  call checkmem( IOS, 'PULSEAVG', PNAME )
-         allocate(BASESUM( NCOLS,NROWS ), STAT=IOS );   call checkmem( IOS, 'BASESUM', PNAME )
+         ! Allocate memory for data and read
+         if (.not. allocated(    FERT)) allocate(    FERT(ncols,nrows))
+         if (.not. allocated(   CFRAC)) allocate(   CFRAC(ncols,nrows))
+         if (.not. allocated(     CRF)) allocate(     CRF(ncols,nrows))
+         if (.not. allocated(  CRFAVG)) allocate(  CRFAVG(ncols,nrows))
+         if (.not. allocated(PULSEAVG)) allocate(PULSEAVG(ncols,nrows))
+         if (.not. allocated( BASESUM)) allocate( BASESUM(ncols,nrows))
          ! ------ Diagnostics -----------------------------------
-                  allocate(    theta_diag(ncols,nrows), stat=ios); call checkmem( ios, 'THETA_DIAG', PNAME )
-                  allocate(      wet_diag(ncols,nrows), stat=ios); call checkmem( ios, 'WET_DIAG', PNAME )
-                  allocate(     temp_diag(ncols,nrows), stat=ios); call checkmem( ios, 'TEMP_DIAG', PNAME )
-                  allocate(        a_diag(ncols,nrows), stat=ios); call checkmem( ios, 'A_DIAG(', PNAME )
-                  allocate(    afert_diag(ncols,nrows), stat=ios); call checkmem( ios, 'AFERT_DIAG', PNAME )
-                  allocate(nres_fert_diag(ncols,nrows), stat=ios); call checkmem( ios, 'NRES_FERT_DIAG', PNAME )
-                  allocate( nres_dep_diag(ncols,nrows), stat=ios); call checkmem( ios, 'NRES_DEP_DIAG', PNAME )
+         if (.not. allocated(    theta_diag)) allocate(    theta_diag(ncols,nrows))
+         if (.not. allocated(      wet_diag)) allocate(      wet_diag(ncols,nrows))
+         if (.not. allocated(     temp_diag)) allocate(     temp_diag(ncols,nrows))
+         if (.not. allocated(        a_diag)) allocate(        a_diag(ncols,nrows))
+         if (.not. allocated(    afert_diag)) allocate(    afert_diag(ncols,nrows))
+         if (.not. allocated(nres_fert_diag)) allocate(nres_fert_diag(ncols,nrows))
+         if (.not. allocated( nres_dep_diag)) allocate( nres_dep_diag(ncols,nrows))
          !-----------------------------------------------------------------------------
          ! Initial run if the model hasnt been run before, otherwise use a restart file
          ! to determine DRYPERIOD, pulse state, prev. timestep soil moisture, and N reservoir.
 
          ! If initial run, initialize some variables, otherwise get them from file
-         IF ( NEW_START .or. IGNORE_SOILINP) THEN
+         PFACTOR   = 1d0   ! array
+         DRYPERIOD = 0.01  ! array initialized non-zero to avoid log(0)
+         CFRAC     = 0. 
+         SOILMPREV = 0d0   ! array
+         FERT      = 0d0   ! array
+         EMPOL     = 0d0
+         EMPOLSUM  = 0d0
+         EMPOLAVG  = 0d0
+         BASESUM   = 0.0
+         CRFAVG    = 0.0
+         PULSEAVG  = 0.0
+         NDEPRES   = 0d0   ! array
 
-            PFACTOR   = 1d0   ! array
-            DRYPERIOD = 0.01  ! array initialized non-zero to avoid log(0)
-            CFRAC     = 0. 
-            SOILMPREV = 0d0   ! array
-            FERT      = 0d0   ! array
-            EMPOL  = 0d0
-            EMPOLSUM  = 0d0
-            EMPOLAVG  = 0d0
-            BASESUM = 0.0
-            CRFAVG = 0.0
-            PULSEAVG = 0.0
-            NDEPRES   = 0d0   ! array
+      !attempt to use steady state condition to reduce spin up time by setting dN/dt = 0
+      !or NDEPRES = Dep rate * tau, the decay time
+      NDEPRES(i,j) = NDEP(i,j)*TAU_SEC
 
-       ! open nitrogen deposition file
-       if (.not. MGN_ONLN_DEP) THEN 
-             ndeprate = bdsnp_ndep(:,:,month)  ! optional for using offline NDEP
-                                               !         instead of online NDEP
-            ! When using online deposition there is no attempt to shorten the
-            ! spin up time so we do not initialize this.
-       end if
-       !attempt to use steady state condition to reduce spin up time by setting dN/dt = 0
-       !or NDEPRES = Dep rate * tau, the decay time
-       do r = 1, nrows
-       do c = 1, ncols
-                NDEPRES( C,R ) = NDEPRATE( C,R )*TAU_SEC
-                !           check for negatives
-                IF( NDEPRES(C,R) .lt. 0.0 ) THEN
-                  Write(MESG,*) 'NDEPRES negative', NDEPRES, ' ',NDEPRATE(C,R)
-                  CALL M3EXIT( PNAME, JDATE, JTIME, MESG, 2 )
-                ELSE IF( NDEPRATE(C,R) .lt. 0.0 ) THEN
-                  Write(MESG,*) 'NDEPRATE negative', NDEPRES,' ',NDEPRATE(C,R)
-                  CALL M3EXIT( PNAME, JDATE, JTIME, MESG, 2 )
-                END IF
-       end do
-       end do
-       ELSE ! SOILINSTATE file available for NDEPRES
-           BASESUM = 0.0
-           CRFAVG = 0.0
-           PULSEAVG = 0.0
-           if (.not. MGN_ONLN_DEP) THEN 
-             ndeprate = bdsnp_ndep(:,:,month)  ! For using offline NDEP
-                                               ! instead of online NDEP
-           end if
-      END IF  ! initial run check
-      END IF ! FIRSTIME
-
-      IF (SECSDIFF(JDATE,JTIME,EDATE,ETIME) .LE. TIME2SEC(TSTEP(2)) .and. .not. L_DESID_DIAG) GOTO 9999
-    
-#ifdef twoway
-       ! CFRAC for offline comes from MCIP but that's unavailable in twoway mode
-       if (.not. allocated(CFRAC_2D)) then
-         CFRAC = 0.
-       else
-         CFRAC = CFRAC_2D
-       end if
-#else
-       if (.not. allocated(CFRAC_2D)) then
-         CFRAC = 0.
-       else
-         CFRAC = Met_Data%CFRAC
-       end if
-#endif 
    
-!    read day dependant fertilizer reservoir e.g. Potter et al 2010
-! get the days fertilizer
-        fert = bdsnp_fert
-
-! Fertilizer N reservoir already calculated and read from file, update deposition reservoir from dep rate
+      ! Fertilizer N reservoir already calculated and read from file, update deposition reservoir from dep rate
       DO R = 1, NROWS
         DO C = 1, NCOLS
-            CALL GET_NDEPRES( TSTEP, NDEPRES( C,R ), TAU_SEC, C, R,L_DESID_DIAG)
+            CALL GET_NDEPRES( TSTEP, NDEPRES(i,j), TAU_SEC, i,j, L_DESID_DIAG)
         END DO
       END DO
 
+      ! Calculate temporal non-speciated soil NO emissions to EMPOL
+      !     If False Dont do any calculations to test - replicate 0 output
 
-! Calculate temporal non-speciated soil NO emissions to EMPOL
+      CALL GET_CANOPY_NOX(JDATE, JTIME, Met_Data%COSZEN,              & 
+           MET_DATA%TEMP2, MET_DATA%RGRND, met_data%PRSFC,            & 
+           LANDTYPE, LAI, Met_Data%SNOCOV, CFRAC, Met_Data%WSPD10, CRF)
 
-!     If False Dont do any calculations to test - replicate 0 output
-      IF( .TRUE. ) THEN
-
-      CALL GET_CANOPY_NOX(JDATE, JTIME, Met_Data%COSZEN,
-           & MET_DATA%TEMP2, MET_DATA%RGRND, met_data%PRSFC, 
-           & BDSNP_LANDTYPE, LAI, Met_Data%SNOCOV, CFRAC, Met_Data%WSPD10, CRF)
-
-      do r = 1, nrows
-      do c = 1, ncols
+      do i=1, nrows
+      do j=1, ncols
          SOILNOX  = 0d0
          FERTDIAG = 0d0
 
-         K = BDSNP_LANDTYPE( C,R ) !Skip LANDTYPE not present
-         ! Temperature-dependent term of soil NOx emissions
-         ! [unitless]
-         ! Uses PX soil temperature instead of inferring from air
-         ! temperature
-         TEMP_TERM = SOILTEMP( SOILT(C,R) )
+         K = LANDTYPE( i,j ) !Skip LANDTYPE not present
+                             ! Temperature-dependent term of soil NOx emissions
+                             ! [unitless]
+                             ! Uses PX soil temperature instead of inferring from air
+                             ! temperature
+         TEMP_TERM = SOILTEMP( SOILT(i,j) )
 
          ! Use THETA instead of boolean wet/dry climate
-         SOILCAT = INT( RSTYP( C,R ) )
+         SOILCAT = INT( RSTYP( i,j ) )
          IF ( SOILCAT .NE. 14) THEN !not water
-            THETA =  SOILM( C,R ) / Grid_Data%WSAT( C,R )
-            THETAPREV = SOILMPREV( C,R ) / Grid_Data%WSAT( C,R )
+            THETA =  SOILM( i,j ) / Grid_Data%WSAT( i,j )
+            THETAPREV = SOILMPREV( i,j ) / Grid_Data%WSAT( i,j )
             ! Soil moisture scaling of soil NOx emissions
-            WET_TERM = SOILWET( THETA , BDSNP_ARID( C,R ), BDSNP_NONARID( C,R ))
+            WET_TERM = SOILWET( THETA , BDSNP_ARID( i,j ), BDSNP_NONARID( i,j ))
          ELSE
             WET_TERM = 0d0
             THETA = 0d0
             THETAPREV = 0d0
          END IF
-         PULSE = PULSING( THETA, TSTEP, THETAPREV, PFACTOR( C,R ), DRYPERIOD( C,R ) )
-         A_FERT = FERTADD( FERT( C,R ) , NDEPRES( C,R ) ) !adds reservoirs returns emission rates
+         PULSE = PULSING( THETA, TSTEP, THETAPREV, PFACTOR( i,j ), DRYPERIOD( i,j ) )
+         A_FERT = FERTADD( FERT( i,j ) , NDEPRES( i,j ) ) !adds reservoirs returns emission rates
          ! Canopy reduction factor
-         CRF_TERM  = CRF( C,R )
+         CRF_TERM  = CRF( i,j )
          !  SOILNOX includes fertilizer
-         SOILNOX   = ( A_BIOME(K) + A_FERT )  !don't forget to check parenthesis when uncommenting
-            & * ( TEMP_TERM * WET_TERM * PULSE )
-            & * ( 1.d0 - CRF_TERM  )
-
-          FERTDIAG  = ( A_FERT ) * ( TEMP_TERM * WET_TERM * PULSE ) * ( 1.d0 - CRF_TERM  )
-
+         SOILNOX   = ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM * PULSE ) * ( 1.d0 - CRF_TERM  )  
+         FERTDIAG  = ( A_FERT ) * ( TEMP_TERM * WET_TERM * PULSE ) * ( 1.d0 - CRF_TERM  )
          !scale emissions
-         EMPOL = SOILNOX *  3600.0 * 10.0**-9![ng N/m2/s] *  s/hr * g/ng
-         BDSNP_NO(C,R) = SOILNOX / 14 ![nmol/m2/s]
+         EMPOL = SOILNOX *  3600.0 * 10.0**-9  ![ng N/m2/s] *  s/hr * g/ng
+         BDSNP_NO(i,j) = SOILNOX / 14          ![nmol/m2/s]
 
          ! sum various quantities for daily averaging
          EMPOLSUM = EMPOLSUM + EMPOL
-         BASESUM(C,R) = BASESUM(C,R) + ( A_BIOME(K) + A_FERT ) !don'tforget check paren when uncommenting
-     &             * ( TEMP_TERM * WET_TERM)
-     &             *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
-         PULSEAVG(C,R) = PULSEAVG(C,R) + ( A_BIOME(K) + A_FERT ) !don'tforget check paren when uncommenting
-     &             * ( TEMP_TERM * WET_TERM * PULSE )
-     &             *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
-         CRFAVG(C,R) = CRFAVG(C,R) + ( A_BIOME(K) + A_FERT ) !don'tforget check paren when uncommenting
-     &             * ( TEMP_TERM * WET_TERM )
-     &             * ( 1.d0 - CRF_TERM  )
-     &             *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
-
+         BASESUM(i,j)  = BASESUM(i,j)  + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM)          *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
+         PULSEAVG(i,j) = PULSEAVG(i,j) + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM * PULSE ) *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
+         CRFAVG(i,j)   = CRFAVG(i,j)   + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM ) * ( 1.d0 - CRF_TERM  ) *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
         !--------- MORE DIAGNOSTICS  ---------------------------------
-         A_DIAG( C,R ) = A_BIOME(K)
-         AFERT_DIAG( C,R ) = A_FERT
-         NRES_FERT_DIAG( C,R ) = FERT( C,R )
-         NRES_DEP_DIAG( C,R )  = NDEPRES( C,R )
-         WET_DIAG( C,R ) = WET_TERM
-         THETA_DIAG( C,R ) = THETA
-         TEMP_DIAG( C,R ) = TEMP_TERM
+         A_DIAG( i,j ) = A_BIOME(K)
+         AFERT_DIAG( i,j ) = A_FERT
+         NRES_FERT_DIAG( i,j ) = FERT( i,j )
+         NRES_DEP_DIAG( i,j )  = NDEPRES( i,j )
+         WET_DIAG( i,j ) = WET_TERM
+         THETA_DIAG( i,j ) = THETA
+         TEMP_DIAG( i,j ) = TEMP_TERM
         ! -----------------------------------------------------
         END DO ! columns
       END DO ! rows
@@ -339,23 +233,22 @@ subroutine megan_nox( yyyy,ddd,hh,                  &
         ierr=nf90_close(ncid)
 
       ELSE ! add things until it dies
-      WRITE( MESG,*) 'BDSNP testing terms'
-      
+
          do r = 1, nrows
          do c = 1, ncols
-            K = BDSNP_LANDTYPE( C,R ) !Skip LANDTYPE not present
+            K = BDSNP_LANDTYPE( i,j ) !Skip LANDTYPE not present
             ! Temperature-dependent term of soil NOx emissions
             ! [unitless]
             ! Uses PX soil temperature instead of inferring from air
             ! temperature
-            TEMP_TERM = SOILTEMP( SOILT(C,R) )
+            TEMP_TERM = SOILTEMP( SOILT(i,j) )
             ! Use THETA instead of boolean wet/dry climate
-            SOILCAT = INT( RSTYP( C,R ) )
+            SOILCAT = INT( RSTYP( i,j ) )
             IF ( SOILCAT .NE. 14) THEN !not water
-               THETA = SOILM( C,R ) / Grid_Data%WSAT(C,R)
-               THETAPREV =  SOILMPREV( C,R ) / Grid_Data%WSAT(C,R)
+               THETA = SOILM( i,j ) / Grid_Data%WSAT(i,j)
+               THETAPREV =  SOILMPREV( i,j ) / Grid_Data%WSAT(i,j)
                ! Soil moisture scaling of soil NOx emissions
-               WET_TERM = SOILWET( THETA , BDSNP_ARID( C,R ), BDSNP_NONARID( C,R ))
+               WET_TERM = SOILWET( THETA , BDSNP_ARID( i,j ), BDSNP_NONARID( i,j ))
             ELSE
                WET_TERM = 0d0
                THETA = 0d0
@@ -363,28 +256,16 @@ subroutine megan_nox( yyyy,ddd,hh,                  &
             END IF
             ! Cumulative multiplication factor (over baseline emissions)
             ! that accounts for soil pulsing
-            PULSE = PULSING( THETA, TSTEP, THETAPREV, PFACTOR( C,R ), DRYPERIOD( C,R ) )
+            PULSE = PULSING( THETA, TSTEP, THETAPREV, PFACTOR( i,j ), DRYPERIOD( i,j ) )
          end do
          end do
       END IF ! end do nothing test if
 
       SOILMPREV = SOILM !save soilM array to soilMprev for next time step
-      MESG = 'BDSNP calculated emissions'
-      !CALL M3MESG(MESG)
-      CALL CPU_TIME(TIMECHECK)
-      WRITE(MESG,*)  'PROCESS TOOK:', TIMECHECK, 'SECONDS'
-      !CALL M3MESG(MESG)
       EMPOLAVG = EMPOLSUM/FLOAT(NCOLS*NROWS)
-      WRITE( MESG,*) 'average value:', EMPOLAVG
-      !CALL M3MESG(MESG)
       EMPOLSUM = 0d0 !array
   
       RETURN
-!      IF ( SECSDIFF( JDATE,JTIME, EDATE,ETIME ) .GT. TIME2SEC( TSTEP( 2 ) ) .OR. L_DESID_DIAG) RETURN
-9999   CONTINUE
-      ! Create soil NO state save file at the end of the run for restart purposes
-      ! Final timestamp
-      NDATE = EDATE; NTIME = ETIME
 
       ! Avoid divide by zero over water where BASESUM = 0
       WHERE ( BASESUM .eq. 0) BASESUM = 1.0  
@@ -393,8 +274,8 @@ subroutine megan_nox( yyyy,ddd,hh,                  &
       WHERE ( CRFAVG   .gt. 100 ) CRFAVG   = 0.0  
       WHERE ( PULSEAVG .gt. 100 ) PULSEAVG = 0.0  
 
-end subroutine megan_nox
 !----------------------------------------------------------------------------------
+contains
 
 REAL FUNCTION PULSING( THETA, TSTEP, THETAPREV, PFACTOR, DRYPERIOD )!_____
 ! !DESCRIPTION: Function PULSING calculates the increase (or "pulse") of
@@ -476,206 +357,150 @@ REAL FUNCTION PULSING( THETA, TSTEP, THETAPREV, PFACTOR, DRYPERIOD )!_____
 
 END FUNCTION PULSING!_____
 !---------------------------------------------------------------------------------------------
-SUBROUTINE GET_NDEPRES( TSTEP, NDEPRES, TAU_SEC,C,R,L_DESID_DIAG)
-! Get the deposition rate of the appropriate species for the appropriate timestep, add to reservoir and decay.
-! Return reservoir amount.
-    USE centralized_io_module, ONLY: ndeprate
-    USE RUNTIME_VARS, ONLY:  MGN_ONLN_DEP
-
+SUBROUTINE GET_NDEPRES( TSTEP, NDEPRES, TAU_SEC,i,j,L_DESID_DIAG)
+    ! Get the deposition rate of the appropriate species for the appropriate timestep, add to reservoir and decay.
+    ! Return reservoir amount.
     IMPLICIT NONE
-    INTEGER, EXTERNAL       ::   TIME2SEC
+    INTEGER, EXTERNAL     ::   TIME2SEC
     ! Function arguments:
-    INTEGER, INTENT( IN )  :: TSTEP( 3 )        ! time step vector (HHMMSS)
-    INTEGER, INTENT( IN )  :: C
-    INTEGER, INTENT( IN )  :: R
-    REAL*8,  INTENT( IN )  :: TAU_SEC
+    INTEGER, INTENT( IN ) :: TSTEP( 3 )        ! time step vector (HHMMSS)
+    INTEGER, INTENT( IN ) :: C
+    INTEGER, INTENT( IN ) :: R
+    REAL*8,  INTENT( IN ) :: TAU_SEC
     LOGICAL, INTENT( IN ) :: L_DESID_DIAG
     REAL,    INTENT( INOUT ) :: NDEPRES
-    ! Local Variables
-    CHARACTER( 256 ) :: MESG            ! message buffer
-    CHARACTER( 16 )  :: PNAME = 'GET_NDEPRES'  ! procedure name
 
-    REAL*8  :: C1 ! a factor
-    REAL*8  :: C2  ! another one
-    REAL*8  :: TS_SEC ! time step in seconds
+    REAL*8  :: C1,C2,TS_SEC ! a factor
     real NDEPTEMP
-!           check for negatives
-          IF( NDEPRES < 0.0 ) THEN
-          WRITE(MESG,*) 'NDEPRES negative'
-          Write(*,*) 'In GET_NDEPRES:'
-          Write(*,*) 'NDEPRES negative', NDEPRES,' '
-          write(*,*) 'TS, TAU, C1, C2:', TS_SEC, TAU_SEC,C1,C2
-          CALL M3EXIT( PNAME, 0, 0, MESG, 2)
-          ELSE IF( NDEPRATE(c,r) < 0.0 ) THEN
-          MESG = 'NDEPRATE negative'
-          Write(*,*) 'In GET_NDEPRES:'
-          Write(*,*) 'NDEPRATE negative', NDEPRATE(c,r)
-          CALL M3EXIT( PNAME, 0, 0, MESG, 2 )
-          END IF
+    !           check for negatives
+    ! takes the NDEP and uses it to update NDEPRES before
+    ! clearing it.
 
-         ! takes the NDEPRATE and uses it to update NDEPRES before
-         ! clearing it.
-
-         !Do mass balance (see Intro to Atm Chem Chap. 3)
-         !m(t) = m(0) * exp(-t/tau) + Source * tau * (1 - exp(-t/tau))
-         TS_SEC = TIME2SEC(TSTEP(2))
-         C1 = EXP( - TS_SEC / TAU_SEC)
-         C2 = 1.d0 - C1
-               NDEPTEMP = NDEPRES
-               NDEPRES = NDEPRES*C1+NDEPRATE(c,r)*TAU_SEC*C2
-!           check for negatives
-          IF( NDEPRES < 0.0 ) THEN
-          MESG = 'negative'
-          Write(*,*) 'In GET_NDEPRES:'
-          Write(*,*) 'NDEPRES negative', NDEPRES
-          write(*,*) 'TS, TAU, C1, C2:', TS_SEC, TAU_SEC,C1,C2
-          CALL M3EXIT( PNAME, 0, 0, MESG, 2 )
-          END IF
-         ! clear NDEPRATE for use during next time step
-          
-         IF (.not. L_DESID_DIAG .and. MGN_ONLN_DEP) THEN 
-                                      ! need this not to be zero'd 
-                                      ! out on last time step
-                                      ! and don't want it zero'd if using
-                                      ! offline values
-          NDEPRATE(c,r) = 0.0 
-         END IF
-         RETURN
+    !Do mass balance (see Intro to Atm Chem Chap. 3)
+    !m(t) = m(0) * exp(-t/tau) + Source * tau * (1 - exp(-t/tau))
+    TS_SEC = TIME2SEC(TSTEP(2))
+    C1 = EXP( - TS_SEC / TAU_SEC)
+    C2 = 1.d0 - C1
+    NDEPTEMP = NDEPRES
+    NDEPRES = NDEPRES*C1+NDEP(i,j)*TAU_SEC*C2
+    !           check for negatives
+     IF( NDEPRES < 0.0 ) THEN
+         print*,"ERROR! NDEP<0.0";exit;
+     END IF
+    ! clear NDEP for use during next time step
+     
+    IF (.not. L_DESID_DIAG .and. MGN_ONLN_DEP) THEN 
+                                 ! need this not to be zero'd 
+                                 ! out on last time step
+                                 ! and don't want it zero'd if using
+                                 ! offline values
+        NDEP(i,j) = 0.0 
+    END IF
+    RETURN
 END SUBROUTINE GET_NDEPRES
 ! -----------------------------------------------------------------------------
-SUBROUTINE GET_N_DEP( SPEC,DEP,C,R )
-            USE UTILIO_DEFN       
-            USE centralized_io_module, only: ndeprate
+SUBROUTINE GET_N_DEP( SPEC,DEP,i,j )
 
-            IMPLICIT NONE
-            CHARACTER( 256 ) :: MESG            ! message buffer
-            CHARACTER( 8 ), INTENT( IN ) :: SPEC  !  dep species
-            REAL,      INTENT( IN ) :: DEP !  deposition rate in kg/ha/s 
-            INTEGER,   INTENT( IN ) :: C
-            INTEGER,   INTENT( IN ) :: R
-            REAL, PARAMETER :: HAOM2   = 1.0e-4 ! ha/m^2 conversion
-            REAL, PARAMETER :: MWNH3   = 17.031 ! molecular weight of NH3
-            REAL, PARAMETER :: MWNH4   = 18.039 ! molecular weight of NH4
-            REAL, PARAMETER :: MWHNO3  = 63.013 ! molecular weight of HNO3
-            REAL, PARAMETER :: MWNO3   = 62.005 ! molecular weight of NO3
-            REAL, PARAMETER :: MWNO2   = 46.006 ! molecular weight of NO2
-            REAL, PARAMETER :: MWPAN   = 121.05 ! molecular weight of Peroxyacyl nitrate
-            REAL, PARAMETER :: MWN     = 14.007 ! molecular weight of Nitrogen
-            REAL, PARAMETER :: NGOKG   = 1.0e12 ! ng/kg conversion
-            
-            ! takes Kg/hectare/s and converts to ng N / m^2/s
+    IMPLICIT NONE
+    CHARACTER( 8 ), INTENT( IN ) :: SPEC  !  dep species
+    REAL,           INTENT( IN ) :: DEP   !  deposition rate in kg/ha/s 
+    INTEGER,        INTENT( IN ) :: i,j
+    REAL, PARAMETER              :: HAOM2   = 1.0e-4 ! ha/m^2 conversion
+    REAL, PARAMETER              :: MWNH3   = 17.031 ! molecular weight of NH3
+    REAL, PARAMETER              :: MWNH4   = 18.039 ! molecular weight of NH4
+    REAL, PARAMETER              :: MWHNO3  = 63.013 ! molecular weight of HNO3
+    REAL, PARAMETER              :: MWNO3   = 62.005 ! molecular weight of NO3
+    REAL, PARAMETER              :: MWNO2   = 46.006 ! molecular weight of NO2
+    REAL, PARAMETER              :: MWPAN   = 121.05 ! molecular weight of Peroxyacyl nitrate
+    REAL, PARAMETER              :: MWN     = 14.007 ! molecular weight of Nitrogen
+    REAL, PARAMETER              :: NGOKG   = 1.0e12 ! ng/kg conversion
+    
+    ! takes Kg/hectare/s and converts to ng N / m^2/s
 
-            IF( INDEX(TRIM( SPEC ), 'NH3') .NE. 0 ) THEN
-               NDEPRATE( C,R ) = NDEPRATE( C,R ) + DEP*HAOM2*NGOKG*MWN/MWNH3 
-            ELSE IF( INDEX(TRIM( SPEC ), 'NH4') .NE. 0 ) THEN
-               NDEPRATE( C,R ) = NDEPRATE( C,R ) + DEP*HAOM2*NGOKG*MWN/MWNH4
-            ELSE IF( INDEX(TRIM( SPEC ), 'HNO3') .NE. 0 ) THEN
-               NDEPRATE( C,R ) = NDEPRATE( C,R ) + DEP*HAOM2*NGOKG*MWN/MWHNO3
-            ELSE IF( INDEX(TRIM( SPEC ), 'NO3') .NE. 0) THEN
-               NDEPRATE( C,R ) = NDEPRATE( C,R ) + DEP*HAOM2*NGOKG*MWN/MWNO3
-            ELSE IF( INDEX(TRIM( SPEC ), 'NO2') .NE. 0 ) THEN
-               NDEPRATE( C,R ) = NDEPRATE( C,R ) + DEP*HAOM2*NGOKG*MWN/MWNO2
-            ELSE IF( INDEX(TRIM( SPEC ), 'PAN') .NE. 0 ) THEN
-               NDEPRATE( C,R ) = NDEPRATE( C,R ) + DEP*HAOM2*NGOKG*MWN/MWPAN
-            Else
-               MESG = 'Invalid Species Name in Get_N_Dep: "' // SPEC // '"'
-               !CALL M3EXIT( PNAME, JDATE, JTIME, MESG, XSTAT2 )
-            END IF
-            
-            IF( (DEP<0.0) .OR. (NDEPRATE( C,R )<0.0) ) then
-            Write(*,*) 'DEP or sum negative',DEP, ' ',NDEPRATE( C,R)
-            MESG = 'negative'
-               CALL M3EXIT( 'GET_N_DEP', 0, 0, MESG, XSTAT2 )
-            END if
+    IF( INDEX(TRIM( SPEC ), 'NH3') .NE. 0 ) THEN
+       NDEP( i,j ) = NDEP( i,j ) + DEP*HAOM2*NGOKG*MWN/MWNH3 
+    ELSE IF( INDEX(TRIM( SPEC ), 'NH4') .NE. 0 ) THEN
+       NDEP( i,j ) = NDEP( i,j ) + DEP*HAOM2*NGOKG*MWN/MWNH4
+    ELSE IF( INDEX(TRIM( SPEC ), 'HNO3') .NE. 0 ) THEN
+       NDEP( i,j ) = NDEP( i,j ) + DEP*HAOM2*NGOKG*MWN/MWHNO3
+    ELSE IF( INDEX(TRIM( SPEC ), 'NO3') .NE. 0) THEN
+       NDEP( i,j ) = NDEP( i,j ) + DEP*HAOM2*NGOKG*MWN/MWNO3
+    ELSE IF( INDEX(TRIM( SPEC ), 'NO2') .NE. 0 ) THEN
+       NDEP( i,j ) = NDEP( i,j ) + DEP*HAOM2*NGOKG*MWN/MWNO2
+    ELSE IF( INDEX(TRIM( SPEC ), 'PAN') .NE. 0 ) THEN
+       NDEP( i,j ) = NDEP( i,j ) + DEP*HAOM2*NGOKG*MWN/MWPAN
+    Else
+       MESG = 'Invalid Species Name in Get_N_Dep: "' // SPEC // '"'
+       !CALL M3EXIT( PNAME, JDATE, JTIME, MESG, XSTAT2 )
+    END IF
+    
+    !IF( (DEP<0.0) .OR. (NDEP( i,j )<0.0) ) then
+    !    !CALL M3EXIT( 'GET_N_DEP', 0, 0, MESG, XSTAT2 )
+    !END if
 
-         RETURN
+    RETURN
 END SUBROUTINE GET_N_DEP  
 ! -----------------------------------------------------------------------------
 REAL FUNCTION SOILTEMP( SOILT )
-! Calculate the soil temperature factor
+    ! Calculate the soil temperature factor
+    IMPLICIT NONE
+    ! Function arguments:
+    REAL, INTENT( IN )       :: SOILT !kelvin, soil temperature
+    ! Local Variables
+    REAl SOILTC                          !temperature in degrees celsius
+    SOILTC = SOILT - 273.16
 
-         IMPLICIT NONE
-! Function arguments:
-         REAL, INTENT( IN )       :: SOILT !kelvin, soil temperature
-! Local Variables
-         REAl SOILTC !temperature in degrees celsius
-         CHARACTER( 256 ) :: MESG            ! message buffer
-         CHARACTER( 16 )  :: PNAME = 'SOILTEMP'  ! procedure name
-         SOILTC = SOILT - 273.16
-
-         IF ( SOILTC <= 0d0 ) THEN
-         ! No soil emissions if temp below freezing
-         SOILTEMP = 0d0
-!         BENCHMARKING:
-!         MESG = 'temperature less than 0 in august florida?'
-!         CALL M3EXIT( PNAME, JDATE, JTIME, MESG, XSTAT1 )
-
-         ELSE
-
-         ! Caps temperature response at 30C
-         IF ( SOILTC >= 30.d0 ) SOILTC = 30.d0
-
-         SOILTEMP =  EXP( 0.103 * SOILTC )
-
-         ENDIF
-         RETURN
+    IF ( SOILTC <= 0d0 ) THEN        ! No soil emissions if temp below freezing
+       SOILTEMP = 0d0
+    ELSE IF ( SOILTC >= 30.d0 ) then ! Caps temperature response at 30C
+       SOILTC = 30.d0
+       SOILTEMP =  EXP( 0.103 * SOILTC )
+    ENDIF
+    RETURN
 END FUNCTION SOILTEMP
 ! ---------------------------------------------------------------------------------------------------------
 REAL FUNCTION FERTADD( FERT , DEPN )
-! Add fertilizer reservoir to deposition reservoir and create N driven
-! emission factor
-         IMPLICIT NONE
-! Function arguments:
-         REAL, INTENT( IN )       :: FERT !fertilizer reservoir [ngN/m2]
-         REAL, INTENT( IN )       :: DEPN !deposition reservoir [ngN/m2]
-
-! Local Variables
-         REAL*8,  PARAMETER :: SECPERYEAR    = 86400.d0 * 365.
-         ! Scale factor so that fertilizer emission = 1.8 Tg N/yr
-         ! (Stehfest and Bouwman, 2006)
-         ! before canopy reduction
-         REAL*8, PARAMETER :: FERT_SCALE = 0.0068 ! [yr -1]
-         ! Value calculated by running the 2x2.5 GEOS-Chem model
-         ! (J.D. Maasakkers)
-         FERTADD = FERT + DEPN
-         FERTADD = FERTADD / SECPERYEAR * FERT_SCALE
-
-         RETURN
+   ! Add fertilizer reservoir to deposition reservoir and create N driven
+   ! emission factor
+   IMPLICIT NONE
+   ! Function arguments:
+   REAL, INTENT( IN ) :: FERT !fertilizer reservoir [ngN/m2]
+   REAL, INTENT( IN ) :: DEPN !deposition reservoir [ngN/m2]
+   ! Local Variables
+   REAL*8,  PARAMETER :: SECPERYEAR    = 86400.d0 * 365. ! Scale factor so that fertilizer emission = 1.8 Tg N/yr (Stehfest and Bouwman, 2006)
+   ! before canopy reduction
+   REAL*8, PARAMETER :: FERT_SCALE = 0.0068 ! [yr -1] ! Value calculated by running the 2x2.5 GEOS-Chem model (J.D. Maasakkers)
+   
+   FERTADD = FERT + DEPN
+   FERTADD = FERTADD / SECPERYEAR * FERT_SCALE
+   RETURN
 END FUNCTION FERTADD
 ! -------------------------------------------------------------------------------------
-! Local Variables
-REAL FUNCTION SOILWET( THETA , ARID, NONARID)
-! Calculate the soil moisture factor
+REAL FUNCTION SOILWET( THETA , ARID, NONARID) ! Calculate the soil moisture factor
          IMPLICIT NONE
-! Function arguments:
          REAL, INTENT( IN )       :: THETA !0-1 soil moisture
          INTEGER, INTENT( IN )    :: ARID !1 indicates arid cell
          INTEGER, INTENT( IN )    :: NONARID !1 indicates nonarid cell, if both 0 then
-! Local Variables
-
-         IF ( ARID .EQ. 1 ) THEN !ARID, Max poison at theta = .2
-         SOILWET = 8.24*THETA*EXP(-12.5*THETA*THETA)
+         IF ( ARID .EQ. 1 ) THEN  !ARID, Max poison at theta = .2
+             SOILWET = 8.24*THETA*EXP(-12.5*THETA*THETA)
          ELSE IF (NONARID .EQ. 1 ) THEN !NONARID Max Poisson at theta =.3
-         SOILWET = 5.5*THETA*EXP(-5.55*THETA*THETA)
+             SOILWET = 5.5*THETA*EXP(-5.55*THETA*THETA)
          ELSE !neither arid nor nonarid, water or non-emitting cell
-         SOILWET = 0.0
+             SOILWET = 0.0
          END IF
 
          IF (SOILWET > 10) THEN
-                 SOILWET=1.0
+             SOILWET=1.0
          ENDIF
          RETURN
 END FUNCTION SOILWET
 ! -------------------------------------------------------------------
-SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
-     & TASFC, SSOLAR, PRES, LANDTYPE, LAI, SNOCOV, CFRAC, WSPD, CRF) ! called tmpbeis, change called BDSNP, add K argument
-
+SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN, TASFC, SSOLAR, PRES, LANDTYPE, LAI, SNOCOV, CFRAC, WSPD, CRF)
+      ! called tmpbeis, change called BDSNP, add K argument
       IMPLICIT NONE
-
-! Arguments
       INTEGER, INTENT( IN )  :: JDATE             ! current simulation date (YYYYDDD)
       INTEGER, INTENT( IN )  :: JTIME             ! current simulation time (HHMMSS)
-!     These are arrays 
+
       REAL,    INTENT( IN ) :: COSZEN( NCOLS,NROWS )        ! cosine of zenith angle
       REAL,    INTENT( IN ) :: TASFC ( NCOLS,NROWS )        ! surface air temperature [K]
       REAL,    INTENT( IN ) :: SSOLAR( NCOLS,NROWS )        ! surface radiation [w/m**2]
@@ -686,19 +511,17 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
       REAL,    INTENT( IN ):: CFRAC  ( NCOLS,NROWS )        ! cloud fraction
       REAL,    INTENT( IN ):: WSPD  ( NCOLS,NROWS )        ! cloud fraction
       REAL,    INTENT( OUT ):: CRF  ( NCOLS,NROWS )        ! outputs the canopy reduction factor
-      ! !LOCAL VARIABLES:
       !
       CHARACTER( 16 )  :: PNAME = 'CANOPY_NOX'  ! procedure name
       INTEGER          IOS                ! IO or memory allocation status
       CHARACTER( 256 ) :: MESG            ! message buffer
       ! Scalars
-      INTEGER :: C, R, K, KK, MY_NCOLS, MY_NROWS
+     INTEGER :: i,j, K, KK, MY_NCOLS, MY_NROWS
       REAL*8  :: F0,     HSTAR, XMW              
       REAL*8  :: DTMP1,  DTMP2, DTMP3,  DTMP4, GFACT, GFACI
       REAL*8  :: RT,     RAD0,  RIX,    RIXX,  RDC,   RLUXX
       REAL*8  :: RGSX,   RCLX,  TEMPK,  TEMPC, WINDSQR
       REAL*8 :: VFNEW
-      
       LOGICAL, SAVE          :: FIRSTCANOPY = .TRUE. 
 
       ! Arrays
@@ -709,8 +532,7 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
       REAL*8  :: RGSO(24)     
       REAL*8  :: RCLS(24)     
       REAL*8  :: RCLO(24)
-! !DEFINED PARAMETERS:
-!      
+     ! !DEFINED PARAMETERS:
      INTEGER, PARAMETER :: SNIRI(24)    = [9999, 200, 9999, 9999, 9999, 9999, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 400, 400, 200, 200, 200, 9999, 200]
      INTEGER, PARAMETER :: SNIRLU(24)   = [9999, 9000, 9999, 9999, 9999, 9999, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 1000, 9000, 9000, 9000, 9000, 1000, 9000, 9999, 9000]
      INTEGER, PARAMETER :: SNIRAC(24)   = [0, 300, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 100, 100, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 200, 100, 200]
@@ -737,24 +559,18 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
       F0    = 0.1d0               ! Reactivity factor for biological oxidation 
       XMW   = 46d-3               ! Molecular wt of NO2 (kg)
 
-      IF( FIRSTCANOPY ) THEN
-        FIRSTCANOPY = .FALSE.
-      END IF
-   
       CRF = 0d0 ! array
       
       ! begin calculating canopy reduction factor
-      DO C=1, NCOLS
-        DO R=1, NROWS
-          IF(LAI(C,R) > 0.0) THEN
-            TEMPC = TASFC(C,R) - 273.15d0 ! convert kelvin to Celsius
+      DO i=1, NCOLS
+      DO j=1, NROWS
+          IF(LAI(i,j) > 0.0) THEN
+            TEMPC = TASFC(i,j) - 273.15d0 ! convert kelvin to Celsius
       ! Compute bulk surface resistance for gases.    
          !                                  
          !  Adjust external surface resistances for temperature; 
          !  from Wesely [1989], expression given in text on p. 1296.        
             RT = 1000.0D0 * EXP( -TEMPC - 4.0d0 )
-         
-                
          !--------------------------------------------------------------
          ! Get surface resistances - loop over biome types K
          !
@@ -770,17 +586,16 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
          ! and for tundra [Jacob et al., 1992].  All surface resistance 
          ! components are normalized to a leaf area index of unity.
          !--------------------------------------------------------------
-	!Set biometype
-         
-            K = LANDTYPE( C,R )
+        !Set biometype
+            K = LANDTYPE( i,j )
             
             ! Set second loop variable to K to allow snow/ice correction
-	     KK = K
+             KK = K
 
             ! If the surface is snow or ice, then set K=3
-            IF ( SNOCOV(C,R) .EQ. 1 ) KK = 3
+            IF ( SNOCOV(i,j) .EQ. 1 ) KK = 3
 
-		!USE new MODIS/KOPPEN Biometypes to read data
+            !USE new MODIS/KOPPEN Biometypes to read data
 
             ! Read the internal resistance RI (minimum stomatal resistance 
             ! for water vapor, per unit area of leaf) from the IRI array; 
@@ -794,10 +609,10 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
             ! to get a cuticular resistance for the bulk canopy.  If IRLU is 
             !'9999' it means there are no cuticular surfaces on which to 
             ! deposit so we impose a very large value for RLU.
-            IF ( SNIRLU(KK) >= 9999 .OR. LAI(C,R) <= 0d0 ) THEN
+            IF ( SNIRLU(KK) >= 9999 .OR. LAI(i,j) <= 0d0 ) THEN
                RLU(K)  = 1.D6
             ELSE
-               RLU(K)= DBLE( SNIRLU(KK) ) / LAI(C,R) + RT
+               RLU(K)= DBLE( SNIRLU(KK) ) / LAI(i,j) + RT
             ENDIF
 
             ! The following are the remaining resistances for the Wesely
@@ -847,7 +662,7 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
             !-------------------------------------------------------------
 
             ! Radiation @ sfc [W/m2]
-            RAD0 = SSOLAR(C,R)
+            RAD0 = SSOLAR(i,j)
             
             ! Internal resistance
             RIX  = RI(K)
@@ -862,10 +677,10 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
 
                GFACI = 100.D0
 
-               IF ( RAD0 > 0d0 .AND. LAI(C,R) > 0d0 ) THEN
+               IF ( RAD0 > 0d0 .AND. LAI(i,j) > 0d0 ) THEN
                   GFACI= 1d0 / 
-     &                   BIOFIT( DRYCOEFF,       LAI(C,R),
-     &                           COSZEN(C,R), CFRAC(C,R)    )
+     &                   BIOFIT( DRYCOEFF,       LAI(i,j),
+     &                           COSZEN(i,j), CFRAC(i,j)    )
                ENDIF
             
                RIX = RIX * GFACT * GFACI
@@ -880,8 +695,8 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
             ! are from equations (6)-(9) of Wesely [1989].
             !
             ! NOTE: here we only consider NO2 (bmy, 6/22/09)
-            RIXX   = RIX * DIFFG( TASFC(C,R), PRESS, XMWH2O ) /
-     &                     DIFFG( TASFC(C,R), PRESS, XMW    )
+            RIXX   = RIX * DIFFG( TASFC(i,j), PRESS, XMWH2O ) /
+     &                     DIFFG( TASFC(i,j), PRESS, XMW    )
      &             + 1.D0 / ( HSTAR/3000.D0 + 100.D0*F0  )
 
             RLUXX  = 1.D12
@@ -910,10 +725,10 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
 
             ! Save the within canopy depvel of NOx, used in calculating 
             ! the canopy reduction factor for soil emissions [1/s]
-            CRF(C,R) = DTMP1 + DTMP2 + DTMP3 + DTMP4
+            CRF(i,j) = DTMP1 + DTMP2 + DTMP3 + DTMP4
             
             ! Pick proper ventilation velocity for day or night
-            IF ( COSZEN( C,R ) > 0d0 ) THEN
+            IF ( COSZEN( i,j ) > 0d0 ) THEN
                VFNEW = VFDAY              
             ELSE 
                VFNEW = VFNIGHT            
@@ -921,39 +736,27 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN,
 
       ! If the leaf area index and the bulk surface resistance
       ! of the canopy to NOx deposition are both nonzero ...
-            IF (CRF(C,R) > 0d0 ) THEN
+            IF (CRF(i,j) > 0d0 ) THEN
 
          ! Adjust the ventilation velocity.  
          ! NOTE: SOILEXC(21) is the canopy wind extinction 
          ! coefficient for the tropical rainforest biome.
-              WINDSQR=WSPD(C,R)*WSPD(C,R)
-              VFNEW    = (VFNEW * SQRT( WINDSQR/9d0 * 7d0/LAI(C,R)) *
-     &                          ( SOILEXC(21)  / SOILEXC(K) ))
+              WINDSQR=WSPD(i,j)*WSPD(i,j)
+              VFNEW    = (VFNEW * SQRT( WINDSQR/9d0 * 7d0/LAI(i,j)) * ( SOILEXC(21)  / SOILEXC(K) ))
 
-         ! Soil canopy reduction factor
-              CRF(C,R) = CRF(C,R) / ( CRF(C,R) + VFNEW )
+              ! Soil canopy reduction factor
+              CRF(i,j) = CRF(i,j) / ( CRF(i,j) + VFNEW )
          
             ELSE ! CRF < 0.0
      
-         ! Otherwise set the soil canopy reduction factor to zero
-              CRF(C,R) = 0d0
+              ! Otherwise set the soil canopy reduction factor to zero
+              CRF(i,j) = 0d0
 
             END IF
 
-            IF( CRF(C,R) .LT. 0.0) THEN
-            
-            MESG = 'CRF Less than 0'
-!            CALL M3EXIT( PNAME, JDATE, JTIME, MESG, 2 )
-            
-            ELSE IF( CRF(C,R) .GT. 1.0) THEN
-            
-            MESG = 'CRF Greater than one'
-!            CALL M3EXIT( PNAME, JDATE, JTIME, MESG, 2 ) 
-            
-            END IF
             
           ELSE
-            CRF(C,R) = 0.0
+            CRF(i,j) = 0.0
           END IF !lai check
 
         END DO !row loop
@@ -965,8 +768,6 @@ FUNCTION DIFFG( TK, PRESS, XM ) RESULT( DIFF_G )
 ! !DESCRIPTION: Function DIFFG calculates the molecular diffusivity [m2/s] in 
 !  air for a gas X of molecular weight XM [kg] at temperature TK [K] and 
 !  pressure PRESS [Pa].
-!\\
-!\\
 !  We specify the molecular weight of air (XMAIR) and the hard-sphere molecular
 !  radii of air (RADAIR) and of the diffusing gas (RADX).  The molecular
 !  radius of air is given in a Table on p. 479 of Levine [1988].  The Table
@@ -974,59 +775,35 @@ FUNCTION DIFFG( TK, PRESS, XM ) RESULT( DIFF_G )
 !  to supply a molecular radius we specify here a generic value of 2.E-10 m for
 !  all molecules, which is good enough in terms of calculating the diffusivity
 !  as long as molecule is not too big.
-!
-! !INPUT PARAMETERS:
-!
-      REAL, INTENT(IN) :: TK      ! Temperature [K]
-      REAL*8, INTENT(IN) :: PRESS   ! Pressure [Pa]
-      REAL*8, INTENT(IN) :: XM      ! Molecular weight of gas [kg]
-!
-! !RETURN VALUE:
-!
-      REAL*8             :: DIFF_G  ! Molecular diffusivity [m2/s]
-!
 ! !REVISION HISTORY:
 !     22 Jun 2009 - R. Yantosca - Copied from "drydep_mod.f"
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-!
-! !LOCAL VARIABLES:
-!
+    implicit none
+    REAL,   INTENT(IN) :: TK      ! Temperature [K]
+    REAL*8, INTENT(IN) :: PRESS   ! Pressure [Pa]
+    REAL*8, INTENT(IN) :: XM      ! Molecular weight of gas [kg]
+    REAL*8             :: DIFF_G  ! Molecular diffusivity [m2/s]
       REAL*8             :: AIRDEN, Z, DIAM, FRPATH, SPEED            
-!
-! !DEFINED PARAMETERS:
-!
       REAL*8, PARAMETER  :: XMAIR  = 28.8d-3 
       REAL*8, PARAMETER  :: RADAIR = 1.2d-10
       REAL*8, PARAMETER  :: PI     = 3.1415926535897932d0
       REAL*8, PARAMETER  :: RADX   = 1.5d-10
       REAL*8, PARAMETER  :: RGAS   = 8.32d0
       REAL*8, PARAMETER  :: AVOGAD = 6.023d23
-
       !=================================================================
       ! DIFFG begins here!
       !=================================================================
-
       ! Air density
       AIRDEN = ( PRESS * AVOGAD ) / ( RGAS * TK )
-
       ! DIAM is the collision diameter for gas X with air.
       DIAM   = RADX + RADAIR
-
-      ! Calculate the mean free path for gas X in air: 
-      ! eq. 8.5 of Seinfeld [1986];
+      ! Calculate the mean free path for gas X in air: ! eq. 8.5 of Seinfeld [1986];
       Z      = XM  / XMAIR
       FRPATH = 1d0 /( PI * SQRT( 1d0 + Z ) * AIRDEN*( DIAM**2 ) )
-
       ! Calculate average speed of gas X; eq. 15.47 of Levine [1988]
       SPEED  = SQRT( 8d0 * RGAS * TK / ( PI * XM ) )
-
-      ! Calculate diffusion coefficient of gas X in air; 
-      ! eq. 8.9 of Seinfeld [1986]
+      ! Calculate diffusion coefficient of gas X in air; ! eq. 8.9 of Seinfeld [1986]
       DIFF_G = ( 3d0 * PI / 32d0 ) * ( 1d0 + Z ) * FRPATH * SPEED
-
-      ! Return to calling program
+      
 END FUNCTION DIFFG
 
 SUBROUTINE SUNPARAM(X)
@@ -1165,4 +942,5 @@ END FUNCTION BIOFIT
 !        Constraints from Ground Station, Cruise, and Aircraft Observations,
 !        submitted to J. Geophys. Res., 2007.      
 
+end subroutine bdsnp_nox
 end module bdsnp_mod

@@ -335,31 +335,31 @@ subroutine get_hourly_data(g,t)
   print*,"  Preparo inputs dinámicos horarios.."
 
   !from meteo:
-  if (.not. allocated(tmp)  ) allocate(  tmp(g%nx,g%ny))! then;;endif 
-  if (.not. allocated(ppfd) ) allocate( ppfd(g%nx,g%ny))! then;;endif
-  if (.not. allocated(u10)  ) allocate(  u10(g%nx,g%ny))! then;;endif
-  if (.not. allocated(v10)  ) allocate(  v10(g%nx,g%ny))! then;;endif
-  if (.not. allocated(pre)  ) allocate(  pre(g%nx,g%ny))! then;;endif
-  if (.not. allocated(hum)  ) allocate(  hum(g%nx,g%ny))! then;;endif
-  if (.not. allocated(rain) ) allocate( rain(g%nx,g%ny))! then;;endif
-  if (.not. allocated(stemp)) allocate(stemp(g%nx,g%ny))! then;;endif
-  if (.not. allocated(smois)) allocate(smois(g%nx,g%ny))! then;;endif
-  if (.not. allocated(lai)  ) allocate(  lai(g%nx,g%ny))! then;;endif
-  if (.not. allocated(wind) ) allocate( wind(g%nx,g%ny))! then;;endif 
+  if (.not. allocated(tmp)  ) allocate(  tmp(g%nx,g%ny))
+  if (.not. allocated(ppfd) ) allocate( ppfd(g%nx,g%ny))
+  if (.not. allocated(u10)  ) allocate(  u10(g%nx,g%ny))
+  if (.not. allocated(v10)  ) allocate(  v10(g%nx,g%ny))
+  if (.not. allocated(pre)  ) allocate(  pre(g%nx,g%ny))
+  if (.not. allocated(hum)  ) allocate(  hum(g%nx,g%ny))
+  if (.not. allocated(rain) ) allocate( rain(g%nx,g%ny))
+  if (.not. allocated(stemp)) allocate(stemp(g%nx,g%ny))
+  if (.not. allocated(smois)) allocate(smois(g%nx,g%ny))
+  if (.not. allocated(lai)  ) allocate(  lai(g%nx,g%ny))
+  if (.not. allocated(wind) ) allocate( wind(g%nx,g%ny))
   call check(nf90_open(trim(met_file), nf90_write, ncid ))
-    call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id,  U10, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id,  V10, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'T2'    , var_id)); call check(nf90_get_var(ncid, var_id,  TMP, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'SWDOWN', var_id)); call check(nf90_get_var(ncid, var_id, PPFD, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'PSFC'  , var_id)); call check(nf90_get_var(ncid, var_id,  PRE, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'Q2'    , var_id)); call check(nf90_get_var(ncid, var_id,  HUM, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'RAINNC', var_id)); call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  LAI, [1,1,t]  ))!,[g%nx,g%ny,1] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t])) !, [g%nx,g%ny,1,t] )) !,[1,1,1]
-    call check( nf90_inq_varid(ncid,'TSLB'  , var_id)); call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t])) !, [g%nx,g%ny,1,t] )) !,[1,1,1]
+    call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id,  U10, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id,  V10, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'T2'    , var_id)); call check(nf90_get_var(ncid, var_id,  TMP, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'SWDOWN', var_id)); call check(nf90_get_var(ncid, var_id, PPFD, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'PSFC'  , var_id)); call check(nf90_get_var(ncid, var_id,  PRE, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'Q2'    , var_id)); call check(nf90_get_var(ncid, var_id,  HUM, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'RAINNC', var_id)); call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  LAI, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t]))
+    call check( nf90_inq_varid(ncid,'TSLB'  , var_id)); call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t]))
   call check(nf90_close(ncid))
               
-  WIND=SQRT(U10*U10 + V10*V10)
+  wind=sqrt(u10*u10 + v10*v10)
   !Ground Incident Radiation [W m-2] to PPFD (Photosynthetic Photon Flux Density [W m-2])
   ppfd=ppfd*4.5*0.45 ! ppfd = par   * 4.5    !par to ppfd
                      ! par  = rgrnd * 0.45   !total rad to Photosyntetic Active Radiation (PAR)
@@ -389,18 +389,18 @@ subroutine get_daily_data(g,DDD)
      allocate(wnd(g%nx,g%ny,time_len)) !windspeed
 
      !Daily variables:
-     if (.not. allocated(ppfd_avg))  allocate(ppfd_avg(g%nx,g%ny) )!then;;endif 
-     if (.not. allocated(tmp_avg) )  allocate( tmp_avg(g%nx,g%ny) )!then;;endif 
-     if (.not. allocated(tmp_min ))  allocate( tmp_min(g%nx,g%ny) )!then;;endif 
-     if (.not. allocated(tmp_max ))  allocate( tmp_max(g%nx,g%ny) )!then;;endif 
-     if (.not. allocated(wind_max))  allocate(wind_max(g%nx,g%ny) )!then;;endif 
+     if (.not. allocated(ppfd_avg))  allocate(ppfd_avg(g%nx,g%ny) )
+     if (.not. allocated(tmp_avg) )  allocate( tmp_avg(g%nx,g%ny) )
+     if (.not. allocated(tmp_min ))  allocate( tmp_min(g%nx,g%ny) )
+     if (.not. allocated(tmp_max ))  allocate( tmp_max(g%nx,g%ny) )
+     if (.not. allocated(wind_max))  allocate(wind_max(g%nx,g%ny) )
      ppfd_avg=0;tmp_avg=0;tmp_min=0;tmp_max=0;wind_max=0;
                   
      call check(nf90_open(trim(met_file), nf90_write, ncid ))
-         call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id, u)) !  , [1,1,t]))!,[g%nx,g%ny,1] )) !,[1,1,1]
-         call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id, v)) !  , [1,1,t]))!,[g%nx,g%ny,1] )) !,[1,1,1]
-         call check( nf90_inq_varid(ncid,'T2'    , var_id)); call check(nf90_get_var(ncid, var_id, t)) !  , [1,1,t]))!,[g%nx,g%ny,1] )) !,[1,1,1]
-         call check( nf90_inq_varid(ncid,'SWDOWN', var_id)); call check(nf90_get_var(ncid, var_id, r)) !  , [1,1,t]))!,[g%nx,g%ny,1] )) !,[1,1,1]
+         call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id, u)) 
+         call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id, v)) 
+         call check( nf90_inq_varid(ncid,'T2'    , var_id)); call check(nf90_get_var(ncid, var_id, t)) 
+         call check( nf90_inq_varid(ncid,'SWDOWN', var_id)); call check(nf90_get_var(ncid, var_id, r)) 
      call check(nf90_close(ncid)) 
      wnd=sqrt(u*u+v*v)
      tmp_min  = minval(t, dim=3,mask=t>0)
