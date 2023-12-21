@@ -14,7 +14,6 @@ module bdsnp_mod
   
   ! New soil biomes based on Steinkamp et al., 2011
   integer, parameter :: nsoil    = 24
- 
   ! Canopy wind extinction coefficients
   ! (cf. Yienger & Levy [1995], Sec 5), now a function of the MODIS/KOPPEN biometype (J.D. Maasakkers)
   real*8, parameter :: soilexc(nsoil) = [0.10, 0.50, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 1.00, 1.00, 1.00, 1.00, 2.00, 4.00, 4.00, 4.00, 4.00, 4.00, 4.00, 4.00, 2.00, 0.10, 2.00]

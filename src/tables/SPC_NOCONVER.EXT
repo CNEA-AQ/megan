@@ -73,20 +73,16 @@
 
 ! Isoprene
       DATA  SPCA_SPC(  1), SPCA_MWT(  1) / 'isoprene', 68.12  /
-
 ! MBO
       DATA  SPCA_SPC(  2), SPCA_MWT(  2) / 'MBO_2m3e2ol', 84.12  /
-
 ! MT_PINE
       DATA  SPCA_SPC(  3), SPCA_MWT(  3) / 'pinene_a', 136.24  /
       DATA  SPCA_SPC(  4), SPCA_MWT(  4) / 'pinene_b', 136.24  /
-
 ! MT_ACYC
       DATA  SPCA_SPC(  5), SPCA_MWT(  5) / 'myrcene', 136.24  /
       DATA  SPCA_SPC(  6), SPCA_MWT(  6) / 'ocimene_al', 136.24  /
       DATA  SPCA_SPC(  7), SPCA_MWT(  7) / 'ocimene_c_b', 136.24  /
       DATA  SPCA_SPC(  8), SPCA_MWT(  8) / 'ocimene_t_b', 136.24  /
-
 ! MT_CAMP
       DATA  SPCA_SPC(  9), SPCA_MWT(  9) / 'bornene', 136.24  /
       DATA  SPCA_SPC(  10), SPCA_MWT(  10) / 'camphene', 136.24  /
@@ -94,7 +90,6 @@
       DATA  SPCA_SPC(  12), SPCA_MWT(  12) / 'fenchene_a', 136.24  /
       DATA  SPCA_SPC(  13), SPCA_MWT(  13) / 'fenchene_b', 136.24  /
       DATA  SPCA_SPC(  14), SPCA_MWT(  14) / 'tricyclene', 136.24  /
-
 ! MT_SABI
       DATA  SPCA_SPC(  15), SPCA_MWT(  15) / 'limonene', 136.24  /
       DATA  SPCA_SPC(  16), SPCA_MWT(  16) / 'phellandrene_b', 136.24  /
@@ -105,13 +100,11 @@
       DATA  SPCA_SPC(  21), SPCA_MWT(  21) / 'terpinolene', 136.24  /
       DATA  SPCA_SPC(  22), SPCA_MWT(  22) / 'thujene_a', 136.24  /
       DATA  SPCA_SPC(  23), SPCA_MWT(  23) / 'verbenene', 134.22  /
-
 ! MT_AROM
       DATA  SPCA_SPC(  24), SPCA_MWT(  24) / 'cymene_o', 134.22  /
       DATA  SPCA_SPC(  25), SPCA_MWT(  25) / 'cymene_p', 134.22  /
       DATA  SPCA_SPC(  26), SPCA_MWT(  26) / 'meta-cymenene', 132.21  /
       DATA  SPCA_SPC(  27), SPCA_MWT(  27) / 'p-cymenene', 132.21  /
-
 ! MT_OXY
       DATA  SPCA_SPC(  28), SPCA_MWT(  28) / 'borneol', 154.25  /
       DATA  SPCA_SPC(  29), SPCA_MWT(  29) / 'bornyl_ACT', 196.29  /
@@ -128,7 +121,6 @@
       DATA  SPCA_SPC(  40), SPCA_MWT(  40) / 'terpineol_a', 154.25  /
       DATA  SPCA_SPC(  41), SPCA_MWT(  41) / 'thujone_a', 152.24  /
       DATA  SPCA_SPC(  42), SPCA_MWT(  42) / 'thujone_b', 152.24  /
-
 ! SQT_HR
       DATA  SPCA_SPC(  43), SPCA_MWT(  43) / 'acoradiene', 204.36  /
       DATA  SPCA_SPC(  44), SPCA_MWT(  44) / 'bergamotene_a', 204.36  /
@@ -155,7 +147,6 @@
       DATA  SPCA_SPC(  65), SPCA_MWT(  65) / 'patchoulene_b', 204.36  /
       DATA  SPCA_SPC(  66), SPCA_MWT(  66) / 'selinene_b', 204.36  /
       DATA  SPCA_SPC(  67), SPCA_MWT(  67) / 'selinene_d', 204.36  /
-
 ! SQT_LR
       DATA  SPCA_SPC(  68), SPCA_MWT(  68) / '2ethyl_hexyl_salate', 250.34  /
       DATA  SPCA_SPC(  69), SPCA_MWT(  69) / 'aromadendrene', 204.36  /
@@ -177,22 +168,17 @@
       DATA  SPCA_SPC(  85), SPCA_MWT(  85) / 'zingiberene_a', 204.36  /
       DATA  SPCA_SPC(  86), SPCA_MWT(  86) / 'copaene_b', 204.36  /
       DATA  SPCA_SPC(  87), SPCA_MWT(  87) / 'longicyclene', 204.36  /
-
 ! METOH
       DATA  SPCA_SPC(  88), SPCA_MWT(  88) / 'methanol', 32.04  /
-
 ! ACTO
       DATA  SPCA_SPC(  89), SPCA_MWT(  89) / 'acetone', 58.08  /
-
 ! ETOH
       DATA  SPCA_SPC(  90), SPCA_MWT(  90) / 'acetaldehyde', 44.05  /
       DATA  SPCA_SPC(  91), SPCA_MWT(  91) / 'ethanol', 46.07  /
-
 ! ACID
       DATA  SPCA_SPC(  92), SPCA_MWT(  92) / 'acetic_acid', 60.05  /
       DATA  SPCA_SPC(  93), SPCA_MWT(  93) / 'formic_acid', 46.03  /
       DATA  SPCA_SPC(  94), SPCA_MWT(  94) / 'pyruvic_acid', 88.06  /
-
 ! LVOC
       DATA  SPCA_SPC(  95), SPCA_MWT(  95) / '2_methylprop_1_ene', 56.11  /
       DATA  SPCA_SPC(  96), SPCA_MWT(  96) / 'butane', 58.12  /
@@ -203,7 +189,6 @@
       DATA  SPCA_SPC(  101), SPCA_MWT(  101) / 'ethene', 28.05  /
       DATA  SPCA_SPC(  102), SPCA_MWT(  102) / 'propane', 44.1  /
       DATA  SPCA_SPC(  103), SPCA_MWT(  103) / 'propene', 42.08  /
-
 ! OXPROD
       DATA  SPCA_SPC(  104), SPCA_MWT(  104) / 'decanal', 156.27  /
       DATA  SPCA_SPC(  105), SPCA_MWT(  105) / 'geranyl_acetone', 194.32  /
@@ -216,7 +201,6 @@
       DATA  SPCA_SPC(  112), SPCA_MWT(  112) / 't-2-octenal', 126.2  /
       DATA  SPCA_SPC(  113), SPCA_MWT(  113) / 'formaldehyde', 30.03  /
       DATA  SPCA_SPC(  114), SPCA_MWT(  114) / 'oxopentanal', 100.12  /
-
 ! STRESS
       DATA  SPCA_SPC(  115), SPCA_MWT(  115) / '1_pentanol', 88.15  /
       DATA  SPCA_SPC(  116), SPCA_MWT(  116) / '1_penten_3_one', 84.12  /
@@ -273,7 +257,6 @@
       DATA  SPCA_SPC(  167), SPCA_MWT(  167) / 'z2_penten_1ol', 86.13  /
       DATA  SPCA_SPC(  168), SPCA_MWT(  168) / 'z2_penten_3ol', 86.13  /
       DATA  SPCA_SPC(  169), SPCA_MWT(  169) / 'z3_hexen_1yl_butyrate', 170.25  /
-
 ! OTHER
       DATA  SPCA_SPC(  170), SPCA_MWT(  170) / 'butanone_2', 72.11  /
       DATA  SPCA_SPC(  171), SPCA_MWT(  171) / 'carbon_2s', 76.14  /
@@ -305,10 +288,8 @@
       DATA  SPCA_SPC(  197), SPCA_MWT(  197) / 'terpinyl_ACT_a', 196.29  /
       DATA  SPCA_SPC(  198), SPCA_MWT(  198) / 'tetradecene_1', 196.38  /
       DATA  SPCA_SPC(  199), SPCA_MWT(  199) / 'undecane', 156.31  /
-
 ! CO 
       DATA  SPCA_SPC(  200), SPCA_MWT(  200) / 'carbon_monoxide', 28.01  /
-
 ! NO
       DATA  SPCA_SPC(  201), SPCA_MWT(  201) / 'nitric_OXD', 30.01  /
 

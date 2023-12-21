@@ -98,20 +98,18 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     logical, parameter    :: gamlt_yn  = .false. !.true.!
     logical, parameter    :: gamhw_yn  = .false. !.true.!
     logical, parameter    :: gamco2_yn = .false. !.true.!
-    logical, parameter    :: gamsm_yn  = .false. !.true.! ! for the cmaq implementation of megan  we refer to soil moisture at layer 2, which is 1 meter for px and 0.5 m for noah.
-                                                          ! Keep this in mind when enabling the GAMSM stress.
-
-    real  :: cdea(layers)  ! Emission response to canopy depth
-    real  :: gamla      ! EA leaf age response
-    real  :: gamaq      ! EA response to air pollution
-    real  :: gambd      ! EA bidirectional exchange LAI response
-    real  :: gamht      ! EA response to high temperature
-    real  :: gamlt      ! EA response to low temperature
-    real  :: gamhw      ! EA response to high wind speed
-    real  :: gamsm      ! EA response to soil moisture
-    real  :: gamco2     ! EA response to CO2
-    real  :: gamtp      ! combines GAMLD, GAMLI, GAMP to get canopy average
-    real  :: ldfmap     ! light depenedent fraction map
+    logical, parameter    :: gamsm_yn  = .false. !.true.! ! for the cmaq implementation of megan  we refer to soil moisture at layer 2, which is 1 meter for px and 0.5 m for noah.Keep this in mind when enabling the GAMSM stress.
+    real  :: cdea(layers) ! Emission response to canopy depth
+    real  :: gamla       ! EA leaf age response
+    real  :: gamaq       ! EA response to air pollution
+    real  :: gambd       ! EA bidirectional exchange LAI response
+    real  :: gamht       ! EA response to high temperature
+    real  :: gamlt       ! EA response to low temperature
+    real  :: gamhw       ! EA response to high wind speed
+    real  :: gamsm       ! EA response to soil moisture
+    real  :: gamco2      ! EA response to CO2
+    real  :: gamtp       ! combines GAMLD, GAMLI, GAMP to get canopy average
+    real  :: ldfmap      ! light depenedent fraction map
 
     REAL :: VPGWT(LAYERS)
     REAL :: SUM1,SUM2,Ea1L,Ea2L
@@ -303,7 +301,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
 
 
   !from mgn2mech ---------
-  print*,"MGN2MECH.."
+  !print*,"MGN2MECH.."
   tmper = 0.
   emis = 0.
 

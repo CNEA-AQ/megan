@@ -22,7 +22,7 @@ program main
    integer           :: ncid,var_id
    character(len=19) :: start_date, end_date
    character(len=16) :: mechanism='CBM05' !'CBM6' 'CB6A7', 'RACM2','CRACM', 'SAPRC' 'NOCON'
-   !logical           :: prep_megan=.false.
+   logical           :: prep_megan=.false.
    character(250)    :: griddesc_file,gridname,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file
    character(250)    :: met_files(24)=""
    character(4)      :: lsm
@@ -39,7 +39,7 @@ program main
    real,    allocatable, dimension(:,:)     :: smois,stemp                   !(x,y,t) from wrfout
    integer, allocatable, dimension(:,:)     :: stype                         !(x,y)   from wrfout
    integer, allocatable, dimension(:,:)     :: arid,non_arid,landtype        !(x,y)   from prep_megan
-   real,    allocatable, dimension(:,:,:)   :: ctf,ef,ldf_in                    !(x,y,*) from prep_megan
+   real,    allocatable, dimension(:,:,:)   :: ctf,ef,ldf_in                 !(x,y,*) from prep_megan
    !real,    allocatable, dimension(:,:)    :: needl,tropi,broad,shrub,grass,crop
    real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) from prep_megan
 
@@ -91,7 +91,7 @@ program main
  
    !--- 
    print '("Allocate output buffer.. ")' 
-   allocate(out_buffer(grid%nx,grid%ny,n_spca_spc,24)) !main out array
+   allocate(out_buffer(grid%nx,grid%ny,n_spca_spc,0:23))!24)) !main out array
 
    !--- 
    print '("Comienza loop.. ")'
@@ -102,23 +102,11 @@ program main
    do while (current_date_s <= end_date_s)
 
       call seconds_to_date(current_date_s,YYYY,MM,DD,DDD,HH)
-      !t=atoi(HH) !time index
-      
-      t=get_t_index(Times, current_date_s) !met t-index
-
-      print*,"t = ",t
-      !if ( t == -99 ) then
-      !    head=head+1;met_file=met_files(head)
-      !    do while ( t == -99 .and. head <= n_files )
-      !    call prep_dynamic_data(met_file,grid,t)
-      !    t=get_t_index(Times, current_date_s) !met t-index
-      !    end do
-      !end if
-      call get_hourly_data(grid,t)
-
+                             
       if ( current_day /= DD .or. current_date_s == end_date_s ) then
          if ( current_day /= "99" ) then
             call write_output_file(grid,YYYY,DDD,MECHANISM)
+            if (current_date_s == end_date_s) print*,"End of run. Chau"; stop
          endif
          current_day=DD
          call get_daily_data(grid,DDD)
@@ -126,10 +114,17 @@ program main
             current_month=MM
             call get_monthly_data(grid,MM)
          endif    
+         out_buffer=0.0
       endif    
+                                                                          
+      t=get_t_index(Times, current_date_s) !met t-index. Hacer función más generica que tambien seleccione el archivo que necesita.
+      print*,"t = ",t
+     
+      call get_hourly_data(grid,t)
 
-     call write_diagnostic_file(grid)
+     !call write_diagnostic_file(grid)
 
+     print*,"MEGAN VOC"
      call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),     & !MEGAN VOCs model
              grid%nx,grid%ny,layers,                   &  !dimensions
              lat,lon,                                  &
@@ -140,18 +135,20 @@ program main
              tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,&  !max temp, min temp, max wind, daily temp and daily ppfd
              out_buffer(:,:,:,atoi(HH))                )  !Emis array
 
-      !soil NO model:
-      !if ( bdnsp_soil_model ) then
-      !    call bdsnp_nox()
-      !else
-      !!call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),  &
-      !!         grid%nx,grid%ny,                      &
-      !!         lat,                                  &
-      !!         tmp,rain,                             &
-      !!         lsm,stype,stemp,smois,                &
-      !!         ctf, lai,                             &
-      !!         out_buffer(:,:,8,atoi(HH))           )
-      !endif
+     print*,"MEGAN NOX"
+     !soil NO model:
+     !if ( bdnsp_soil_model ) then
+     !    call bdsnp_nox()
+     !else
+     
+     call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),  &
+              grid%nx,grid%ny,                      &
+              lat,                                  &
+              tmp,rain,                             &
+              lsm,stype,stemp,smois,                &
+              ctf, lai,                             &
+              out_buffer(:,:,8,atoi(HH))           )
+     !endif
 
      !laip=laic
      !----
@@ -276,7 +273,6 @@ subroutine prep_static_data(g)
   character(len=10),dimension(19) :: ef_vars=["EF_ISOP   ", "EF_MBO    ", "EF_MT_PINE", "EF_MT_ACYC", "EF_MT_CAMP", "EF_MT_SABI", "EF_MT_AROM", "EF_NO     ", "EF_SQT_HR ", "EF_SQT_LR ", "EF_MEOH   ", "EF_ACTO   ", "EF_ETOH   ", "EF_ACID   ", "EF_LVOC   ", "EF_OXPROD ", "EF_STRESS ", "EF_OTHER  ", "EF_CO     "]
   character(len=5),dimension(4)   :: ldf_vars=["LDF03","LDF04","LDF05","LDF06"]
 
-print*,"NRTYP: ",nrtyp
   !Allocation of variables to use
   allocate(    arid(g%nx,g%ny               ))
   allocate(non_arid(g%nx,g%ny               ))
@@ -453,10 +449,9 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
      call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
      call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
      call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
-     !print*,"shape buffer: ",shape(out_buffer)
      !Creo variables:
      do k=1,NMGNSPC !n_scon_spc !
-       print*,"Especie: ",k,n_scon_spc,trim(mech_spc(k))
+        !print*,"Especie: ",k,n_scon_spc,trim(mech_spc(k))
         call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
      end do
    call check(nf90_enddef(ncid))   !End NetCDF define mode
@@ -464,7 +459,7 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
    !Abro NetCDF y guardo variables de salida
    call check(nf90_open(trim(out_file), nf90_write, ncid       ))
      do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
-       print*,"Especie:",trim(mech_spc(k))
+       print*,"   Especie:",trim(mech_spc(k))
        call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer(:,:,k,:) ))
      enddo
    call check(nf90_close( ncid ))
@@ -528,69 +523,64 @@ subroutine megan_map(mechanism)
            n_scon_spc = n_cracmm
            NMGNSPC = n_cracmm_spc
          CASE DEFAULT
-           print*,"Mechanism," // TRIM( MECHANISM) // ", is not identified."
+           print*,"Mechanism," // TRIM( MECHANISM) // ", is not identified.";stop
        ENDSELECT
 
-   allocate(MEGAN_NAMES(NMGNSPC), stat=ios)
-       allocate(spmh_map(n_scon_spc), stat=ios)
-       allocate(mech_map(n_scon_spc), stat=ios)
-       allocate(conv_fac(n_scon_spc), stat=ios)
-       allocate(mech_spc(NMGNSPC )  , stat=ios)
-       allocate(mech_mwt(NMGNSPC )  , stat=ios)
+       allocate(spmh_map(n_scon_spc))
+       allocate(mech_map(n_scon_spc))
+       allocate(conv_fac(n_scon_spc))
+       allocate(mech_spc(NMGNSPC )  )
+       allocate(mech_mwt(NMGNSPC )  )
+       allocate(MEGAN_NAMES(NMGNSPC))
 
        SELECT CASE ( TRIM(MECHANISM) )
          CASE ('CB05')
-           spmh_map(1:n_scon_spc) = spmh_map_cb05(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_cb05(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_cb05(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_cb05(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_cb05(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =      mech_spc(1:NMGNSPC)
+           spmh_map(1:n_scon_spc) = spmh_map_cb05(1:n_scon_spc)   !mechanism spc id
+           mech_map(1:n_scon_spc) = mech_map_cb05(1:n_scon_spc)   !megan     spc id
+           conv_fac(1:n_scon_spc) = conv_fac_cb05(1:n_scon_spc)   !conversion factor 
+           mech_spc(1:NMGNSPC)    = mech_spc_cb05(1:NMGNSPC)      !mechanism spc name
+           mech_mwt(1:NMGNSPC)    = mech_mwt_cb05(1:NMGNSPC)      !mechanism spc molecular weight
          CASE ('CB6')
            spmh_map(1:n_scon_spc) = spmh_map_cb6(1:n_scon_spc)
            mech_map(1:n_scon_spc) = mech_map_cb6(1:n_scon_spc)
            conv_fac(1:n_scon_spc) = conv_fac_cb6(1:n_scon_spc)
            mech_spc(1:NMGNSPC)    = mech_spc_cb6(1:NMGNSPC)
            mech_mwt(1:NMGNSPC)    = mech_mwt_cb6(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =     mech_spc(1:NMGNSPC)
          CASE ('RACM2')
            spmh_map(1:n_scon_spc) = spmh_map_racm2(1:n_scon_spc)
            mech_map(1:n_scon_spc) = mech_map_racm2(1:n_scon_spc)
            conv_fac(1:n_scon_spc) = conv_fac_racm2(1:n_scon_spc)
            mech_spc(1:NMGNSPC)    = mech_spc_racm2(1:NMGNSPC)
            mech_mwt(1:NMGNSPC)    = mech_mwt_racm2(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =       mech_spc(1:NMGNSPC)
          CASE ('SAPRC07')
            spmh_map(1:n_scon_spc) = spmh_map_saprc07(1:n_scon_spc)
            mech_map(1:n_scon_spc) = mech_map_saprc07(1:n_scon_spc)
            conv_fac(1:n_scon_spc) = conv_fac_saprc07(1:n_scon_spc)
            mech_spc(1:NMGNSPC)    = mech_spc_saprc07(1:NMGNSPC)
            mech_mwt(1:NMGNSPC)    = mech_mwt_saprc07(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =         mech_spc(1:NMGNSPC)
          CASE ('SAPRC07T')
            spmh_map(1:n_scon_spc) = spmh_map_saprc07t(1:n_scon_spc)
            mech_map(1:n_scon_spc) = mech_map_saprc07t(1:n_scon_spc)
            conv_fac(1:n_scon_spc) = conv_fac_saprc07t(1:n_scon_spc)
            mech_spc(1:NMGNSPC)    = mech_spc_saprc07t(1:NMGNSPC)
            mech_mwt(1:NMGNSPC)    = mech_mwt_saprc07t(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =          mech_spc(1:NMGNSPC)
          CASE ('CB6_ae7')
            spmh_map(1:n_scon_spc) = spmh_map_cb6_ae7(1:n_scon_spc)
            mech_map(1:n_scon_spc) = mech_map_cb6_ae7(1:n_scon_spc)
            conv_fac(1:n_scon_spc) = conv_fac_cb6_ae7(1:n_scon_spc)
            mech_spc(1:NMGNSPC)    = mech_spc_cb6_ae7(1:NMGNSPC)
            mech_mwt(1:NMGNSPC)    = mech_mwt_cb6_ae7(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =         mech_spc(1:NMGNSPC)
          CASE ('CRACMM')
            spmh_map(1:n_scon_spc) = spmh_map_cracmm(1:n_scon_spc)
            mech_map(1:n_scon_spc) = mech_map_cracmm(1:n_scon_spc)
            conv_fac(1:n_scon_spc) = conv_fac_cracmm(1:n_scon_spc)
            mech_spc(1:NMGNSPC)    = mech_spc_cracmm(1:NMGNSPC)
            mech_mwt(1:NMGNSPC)    = mech_mwt_cracmm(1:NMGNSPC)
-           MEGAN_NAMES(1:NMGNSPC) =        mech_spc(1:NMGNSPC)
          CASE DEFAULT
-           print*,"Mapping for Mechanism,"//TRIM(MECHANISM)//", is unspecified."
+           print*,"Mapping for Mechanism,"//TRIM(MECHANISM)//", is unspecified.";stop
        ENDSELECT
+       MEGAN_NAMES(1:NMGNSPC) = mech_spc(1:NMGNSPC)
+
 end subroutine megan_map
 
 subroutine check(status)
@@ -668,32 +658,32 @@ subroutine write_diagnostic_file(g) !write input and intermediate data so i can 
   call check(nf90_enddef(ncid))   !End NetCDF define mode
 
   call check(nf90_open(trim(diag_file), nf90_write, ncid ))
-      call check(nf90_inq_varid(ncid,'LAT'  ,var_id )); call check(nf90_put_var(ncid, var_id, lat     ))      !print*, " LAT'    ";
-      call check(nf90_inq_varid(ncid,'LON'  ,var_id )); call check(nf90_put_var(ncid, var_id, lon     ))      !print*, " LON'    ";
-      !call check(nf90_inq_varid(ncid,'EF'   ,var_id )); call check(nf90_put_var(ncid, var_id, ef      ))     !print*, " EF'     ";
-      !call check(nf90_inq_varid(ncid,'LDF'  ,var_id )); call check(nf90_put_var(ncid, var_id, ldf_in     ))  !print*, " LDF'    ";
-      !call check(nf90_inq_varid(ncid,'CTS'  ,var_id )); call check(nf90_put_var(ncid, var_id, CTS     ))     !print*, " CTS'    ";
-      call check(nf90_inq_varid(ncid,'LAI'  ,var_id )); call check(nf90_put_var(ncid, var_id, lai     ))      !print*, " LAI'    ";
-      call check(nf90_inq_varid(ncid,'NDEP' ,var_id )); call check(nf90_put_var(ncid, var_id, ndep    ))      !print*, " NDEP'   ";
-      call check(nf90_inq_varid(ncid,'FERT' ,var_id )); call check(nf90_put_var(ncid, var_id, fert    ))      !print*, " FERT'   ";
-      call check(nf90_inq_varid(ncid,'ARID' ,var_id )); call check(nf90_put_var(ncid, var_id, arid    ))      !print*, " ARID'   ";
-      call check(nf90_inq_varid(ncid,'NARID',var_id )); call check(nf90_put_var(ncid, var_id, non_arid))      !print*, " NARID'  ";
-      call check(nf90_inq_varid(ncid,'LTYPE',var_id )); call check(nf90_put_var(ncid, var_id, landtype))      !print*, " LTYPE'  ";
-      call check(nf90_inq_varid(ncid,'U10'  ,var_id )); call check(nf90_put_var(ncid, var_id, u10     ))      !print*, " U10'    ";
-      call check(nf90_inq_varid(ncid,'V10'  ,var_id )); call check(nf90_put_var(ncid, var_id, v10     ))      !print*, " V10'    ";
-      call check(nf90_inq_varid(ncid,'PRE'  ,var_id )); call check(nf90_put_var(ncid, var_id, pre     ))      !print*, " PRE'    ";
-      call check(nf90_inq_varid(ncid,'TMP'  ,var_id )); call check(nf90_put_var(ncid, var_id, tmp     ))      !print*, " TMP'    ";
-      call check(nf90_inq_varid(ncid,'PPFD' ,var_id )); call check(nf90_put_var(ncid, var_id, ppfd    ))      !print*, " PPFD'   ";
-      call check(nf90_inq_varid(ncid,'HUM'  ,var_id )); call check(nf90_put_var(ncid, var_id, hum     ))      !print*, " HUM'    ";
-      call check(nf90_inq_varid(ncid,'STEMP',var_id )); call check(nf90_put_var(ncid, var_id, stemp   ))      !print*, " STEMP'  ";
-      call check(nf90_inq_varid(ncid,'SMOIS',var_id )); call check(nf90_put_var(ncid, var_id, smois   ))      !print*, " SMOIS'  ";
-      call check(nf90_inq_varid(ncid,'STYPE',var_id )); call check(nf90_put_var(ncid, var_id, stype   ))      !print*, " STYPE'  ";
-      call check(nf90_inq_varid(ncid,'T_MIN',var_id )); call check(nf90_put_var(ncid, var_id, tmp_min ))      !print*, " T_MIN'  ";
-      call check(nf90_inq_varid(ncid,'T_MAX',var_id )); call check(nf90_put_var(ncid, var_id, tmp_max ))      !print*, " T_MAX'  ";
-      call check(nf90_inq_varid(ncid,'T_AVG',var_id )); call check(nf90_put_var(ncid, var_id, tmp_avg ))      !print*, " T_AVG'  ";
-      call check(nf90_inq_varid(ncid,'W_MAX',var_id )); call check(nf90_put_var(ncid, var_id,wind_max ))      !print*, " W_MAX'  ";
-      call check(nf90_inq_varid(ncid,'R_AVG',var_id )); call check(nf90_put_var(ncid, var_id, ppfd_avg ))     !print*, " R_AVG'  ";
-      call check(nf90_inq_varid(ncid,'RAIN' ,var_id )); call check(nf90_put_var(ncid, var_id, rain    ))      !print*, " RAIN'   ";
+      call check(nf90_inq_varid(ncid,'LAT'  ,var_id )); call check(nf90_put_var(ncid, var_id, lat     ))    !print*, " LAT'    ";
+      call check(nf90_inq_varid(ncid,'LON'  ,var_id )); call check(nf90_put_var(ncid, var_id, lon     ))    !print*, " LON'    ";
+      !call check(nf90_inq_varid(ncid,'EF'   ,var_id )); call check(nf90_put_var(ncid, var_id, ef      ))   !print*, " EF'     ";
+      !call check(nf90_inq_varid(ncid,'LDF'  ,var_id )); call check(nf90_put_var(ncid, var_id, ldf_in  ))   !print*, " LDF'    ";
+      !call check(nf90_inq_varid(ncid,'CTS'  ,var_id )); call check(nf90_put_var(ncid, var_id, CTS     ))   !print*, " CTS'    ";
+      call check(nf90_inq_varid(ncid,'LAI'  ,var_id )); call check(nf90_put_var(ncid, var_id, lai     ))    !print*, " LAI'    ";
+      call check(nf90_inq_varid(ncid,'NDEP' ,var_id )); call check(nf90_put_var(ncid, var_id, ndep    ))    !print*, " NDEP'   ";
+      call check(nf90_inq_varid(ncid,'FERT' ,var_id )); call check(nf90_put_var(ncid, var_id, fert    ))    !print*, " FERT'   ";
+      call check(nf90_inq_varid(ncid,'ARID' ,var_id )); call check(nf90_put_var(ncid, var_id, arid    ))    !print*, " ARID'   ";
+      call check(nf90_inq_varid(ncid,'NARID',var_id )); call check(nf90_put_var(ncid, var_id, non_arid))    !print*, " NARID'  ";
+      call check(nf90_inq_varid(ncid,'LTYPE',var_id )); call check(nf90_put_var(ncid, var_id, landtype))    !print*, " LTYPE'  ";
+      call check(nf90_inq_varid(ncid,'U10'  ,var_id )); call check(nf90_put_var(ncid, var_id, u10     ))    !print*, " U10'    ";
+      call check(nf90_inq_varid(ncid,'V10'  ,var_id )); call check(nf90_put_var(ncid, var_id, v10     ))    !print*, " V10'    ";
+      call check(nf90_inq_varid(ncid,'PRE'  ,var_id )); call check(nf90_put_var(ncid, var_id, pre     ))    !print*, " PRE'    ";
+      call check(nf90_inq_varid(ncid,'TMP'  ,var_id )); call check(nf90_put_var(ncid, var_id, tmp     ))    !print*, " TMP'    ";
+      call check(nf90_inq_varid(ncid,'PPFD' ,var_id )); call check(nf90_put_var(ncid, var_id, ppfd    ))    !print*, " PPFD'   ";
+      call check(nf90_inq_varid(ncid,'HUM'  ,var_id )); call check(nf90_put_var(ncid, var_id, hum     ))    !print*, " HUM'    ";
+      call check(nf90_inq_varid(ncid,'STEMP',var_id )); call check(nf90_put_var(ncid, var_id, stemp   ))    !print*, " STEMP'  ";
+      call check(nf90_inq_varid(ncid,'SMOIS',var_id )); call check(nf90_put_var(ncid, var_id, smois   ))    !print*, " SMOIS'  ";
+      call check(nf90_inq_varid(ncid,'STYPE',var_id )); call check(nf90_put_var(ncid, var_id, stype   ))    !print*, " STYPE'  ";
+      call check(nf90_inq_varid(ncid,'T_MIN',var_id )); call check(nf90_put_var(ncid, var_id, tmp_min ))    !print*, " T_MIN'  ";
+      call check(nf90_inq_varid(ncid,'T_MAX',var_id )); call check(nf90_put_var(ncid, var_id, tmp_max ))    !print*, " T_MAX'  ";
+      call check(nf90_inq_varid(ncid,'T_AVG',var_id )); call check(nf90_put_var(ncid, var_id, tmp_avg ))    !print*, " T_AVG'  ";
+      call check(nf90_inq_varid(ncid,'W_MAX',var_id )); call check(nf90_put_var(ncid, var_id,wind_max ))    !print*, " W_MAX'  ";
+      call check(nf90_inq_varid(ncid,'R_AVG',var_id )); call check(nf90_put_var(ncid, var_id, ppfd_avg ))   !print*, " R_AVG'  ";
+      call check(nf90_inq_varid(ncid,'RAIN' ,var_id )); call check(nf90_put_var(ncid, var_id, rain    ))    !print*, " RAIN'   ";
   call check(nf90_close( ncid ))
 end subroutine
 
