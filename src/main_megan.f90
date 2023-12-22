@@ -11,6 +11,23 @@ program main
    
    implicit none
 
+  !tables to map megan species to chemical mechanism species
+   INCLUDE 'tables/SPC_NOCONVER.EXT'
+   INCLUDE 'tables/SPC_CB05.EXT'
+   INCLUDE 'tables/SPC_CB6.EXT'
+   INCLUDE 'tables/SPC_CB6_AE7.EXT'
+   INCLUDE 'tables/SPC_RACM2.EXT'        ! new in MEGAN3
+   INCLUDE 'tables/SPC_CRACMM.EXT'       ! new in CMAQ 5.4
+   INCLUDE 'tables/SPC_SAPRC07.EXT'      ! new in MEGAN3
+   INCLUDE 'tables/SPC_SAPRC07T.EXT'     ! new in MEGAN3
+   INCLUDE 'tables/MAP_CV2CB05.EXT'
+   INCLUDE 'tables/MAP_CV2CB6.EXT'
+   INCLUDE 'tables/MAP_CV2CB6_AE7.EXT'
+   INCLUDE 'tables/MAP_CV2RACM2.EXT'
+   INCLUDE 'tables/MAP_CV2CRACMM.EXT'
+   INCLUDE 'tables/MAP_CV2SAPRC07.EXT'
+   INCLUDE 'tables/MAP_CV2SAPRC07T.EXT'
+
    type grid_type
        integer  :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
    end type grid_type
@@ -52,7 +69,7 @@ program main
    real,    allocatable, dimension(:,:)     :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
   
    !output vars:
-   real,    allocatable, dimension(:,:,:,:) :: out_buffer                     !(x,y,nclass,t)
+   real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all      !(x,y,nclass,t)
 
    !---
    namelist/megan_nl/start_date,end_date,met_files,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file,mechanism,griddesc_file,gridname,lsm
@@ -77,9 +94,9 @@ program main
 
    !---
    print '("Preparo mecanísmo y especies.. ")'
-   call megan_map(mechanism)
+   call select_megan_mechanism(mechanism)
    print*,"  Mecanísmo: ",mechanism
-   print*,"  Especies: ",megan_names
+   print*,"  Especies: ",size(megan_names)
 
    !---
    print '("Read meteo params and coordinates.. ")'
@@ -91,7 +108,8 @@ program main
  
    !--- 
    print '("Allocate output buffer.. ")' 
-   allocate(out_buffer(grid%nx,grid%ny,n_spca_spc,0:23))!24)) !main out array
+   allocate(out_buffer_all(grid%nx,grid%ny,n_spca_spc,0:23))!24)) !main out array
+   allocate(out_buffer(grid%nx,grid%ny,NCLASS,0:23))        !24)) !non-dimensional emision rates of each megan species categories
 
    !--- 
    print '("Comienza loop.. ")'
@@ -99,15 +117,20 @@ program main
        end_date_s = atoi( date(  end_date, "%s"))
    n_hours=floor(real((end_date_s-current_date_s)/3600))
    !do t=1,n_hours
-   do while (current_date_s <= end_date_s)
+   do while (current_date_s < end_date_s)
 
       call seconds_to_date(current_date_s,YYYY,MM,DD,DDD,HH)
                              
       if ( current_day /= DD .or. current_date_s == end_date_s ) then
          if ( current_day /= "99" ) then
+            
+            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)  !convert to mechanism species before write the output
+
             call write_output_file(grid,YYYY,DDD,MECHANISM)
-            if (current_date_s == end_date_s) print*,"End of run. Chau"; stop
+
+            if (current_date_s == end_date_s) print*,"End of run. Chau";! stop
          endif
+
          current_day=DD
          call get_daily_data(grid,DDD)
          if ( current_month /= MM ) then
@@ -129,8 +152,8 @@ program main
              grid%nx,grid%ny,layers,                   &  !dimensions
              lat,lon,                                  &
              tmp,ppfd,wind,pre,hum,                    & !INPs: 
-             lai, lai,                                 &
-             ctf, ef, ldf_in,                          &  !LAI (past), LAI (current), EF, LDF              &
+             lai, lai,                                 &  !LAI (past), LAI (current),
+             ctf, ef, ldf_in,                          &  !CTF, EF, LDF
              lsm,stype,smois,                          &  !mesea Inps: land surface model, soil type, soil moisture!
              tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,&  !max temp, min temp, max wind, daily temp and daily ppfd
              out_buffer(:,:,:,atoi(HH))                )  !Emis array
@@ -147,7 +170,7 @@ program main
               tmp,rain,                             &
               lsm,stype,stemp,smois,                &
               ctf, lai,                             &
-              out_buffer(:,:,8,atoi(HH))           )
+              out_buffer(:,:,i_NO,atoi(HH))         )
      !endif
 
      !laip=laic
@@ -210,7 +233,6 @@ subroutine seconds_to_date(date_s,yyyy,mm,dd,ddd,hh)
     HH=date("@"//itoa(date_s), "%H")  !hora
     print '("  ",A4,"-",A2,"-",A2," (día: ",A3,"), ",2A,"hs.")',YYYY,MM,DD,DDD,HH
 end subroutine
-
 
 subroutine get_meteofile_info(meteo_file,g,lat,lon,times)
    implicit none
@@ -329,8 +351,6 @@ subroutine get_hourly_data(g,t)
   integer :: ncid,time_dimid,time_len
   
   print*,"  Preparo inputs dinámicos horarios.."
-
-  !from meteo:
   if (.not. allocated(tmp)  ) allocate(  tmp(g%nx,g%ny))
   if (.not. allocated(ppfd) ) allocate( ppfd(g%nx,g%ny))
   if (.not. allocated(u10)  ) allocate(  u10(g%nx,g%ny))
@@ -360,7 +380,6 @@ subroutine get_hourly_data(g,t)
   ppfd=ppfd*4.5*0.45 ! ppfd = par   * 4.5    !par to ppfd
                      ! par  = rgrnd * 0.45   !total rad to Photosyntetic Active Radiation (PAR)
 end subroutine
- 
 
 subroutine get_daily_data(g,DDD)
   implicit none
@@ -425,80 +444,9 @@ subroutine get_monthly_data(g,MM)!,lai,ndep)
 end subroutine
 
 
-subroutine write_output_file(g,YYYY,DDD,MECHANISM)
-  implicit none
-  type(grid_type) , intent(in) :: g
-  character(len=5), intent(in) :: MECHANISM
-  character(len=4), intent(in) :: YYYY
-  character(len=3), intent(in) :: DDD
-  !local vars
-  integer           :: ncid,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
-  integer           :: k!,i,j
-  character(len=25) :: out_file
-  !Creo NetCDF file
-   out_file="out_"//YYYY//"_"//DDD//"_"//trim(MECHANISM)//".nc"
-   print*,"ESCRIBIENDO: ",out_file
-
-   !Crear NetCDF
-   call check(nf90_create(trim(out_file), NF90_CLOBBER, ncid))
-     !Defino dimensiones
-     call check(nf90_def_dim(ncid, "Time", 24     , t_dim_id       ))
-     call check(nf90_def_dim(ncid, "x"   , g%nx   , x_dim_id       ))
-     call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
-     !Defino variables
-     call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
-     call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
-     call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
-     !Creo variables:
-     do k=1,NMGNSPC !n_scon_spc !
-        !print*,"Especie: ",k,n_scon_spc,trim(mech_spc(k))
-        call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-     end do
-   call check(nf90_enddef(ncid))   !End NetCDF define mode
-
-   !Abro NetCDF y guardo variables de salida
-   call check(nf90_open(trim(out_file), nf90_write, ncid       ))
-     do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
-       print*,"   Especie:",trim(mech_spc(k))
-       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer(:,:,k,:) ))
-     enddo
-   call check(nf90_close( ncid ))
-end subroutine write_output_file
-!0000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-
-subroutine megan_map(mechanism)
-
+subroutine select_megan_mechanism(mechanism)
   implicit none
     character( 16 )    :: mechanism     ! mechanism name
-    integer, parameter :: nmechs = 16   ! dimension for number of mechanisms considered
-    integer ios,indx
-    integer i
-
-    TYPE MIOG_MECH_TYPE
-         CHARACTER( 32 ) :: CHEMMECH
-         CHARACTER( 16 ) :: MIOGMECH
-    END TYPE MIOG_MECH_TYPE
-
-    TYPE(MIOG_MECH_TYPE) :: MIOG_MECH_MAP( NMECHS ) = [       &
-       miog_mech_type('CB05E51_AE6_AQ         ','CB05    '),  &
-       miog_mech_type('CB05EH51_AE6_AQ        ','CB05    '),  &
-       miog_mech_type('CB05MP51_AE6_AQ        ','CB05    '),  &
-       miog_mech_type('CB05TUCL51_AE6_AQ      ','CB05    '),  &
-       miog_mech_type('CB6R3_AE6_AQ           ','CB6     '),  &
-       miog_mech_type('CB6MP_AE6_AQ           ','CB6     '),  &
-       miog_mech_type('CB6R5HAP_AE7_AQ        ','CB6_ae7 '),  &
-       miog_mech_type('CB6R3_AE7_AQ           ','CB6_ae7 '),  &
-       miog_mech_type('CB6R5_AE7_AQ           ','CB6_ae7 '),  &
-       miog_mech_type('CB6R5M_AE7_AQ          ','CB6_ae7 '),  &
-       miog_mech_type('RACM2_AE6_AQ           ','RACM2   '),  &
-       miog_mech_type('SAPRC07TC_AE6_AQ       ','SAPRC07T'),  &
-       miog_mech_type('SAPRC07TIC_AE7I_AQ     ','SAPRC07T'),  &
-       miog_mech_type('SAPRC07TIC_AE7I_AQKMT2 ','SAPRC07T'),  &
-       miog_mech_type('CRACMM1_AQ             ','CRACMM  '),  &
-       miog_mech_type('CRACMM1AMORE_AQ        ','CRACMM  ')   ]
-
-       !INDX = INDEX1( MECHNAME, NMECHS, MIOG_MECH_MAP%CHEMMECH )
-       !MECHANISM = MIOG_MECH_MAP( INDX )%MIOGMECH
 
        SELECT CASE ( TRIM(MECHANISM) )
          CASE ('SAPRC07')
@@ -581,7 +529,86 @@ subroutine megan_map(mechanism)
        ENDSELECT
        MEGAN_NAMES(1:NMGNSPC) = mech_spc(1:NMGNSPC)
 
-end subroutine megan_map
+end subroutine select_megan_mechanism
+
+subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
+    implicit none
+    integer, intent(in) :: ncols,nrows,ntimes
+    real, intent(in)    :: non_dim_emis(ncols,nrows,nclass,ntimes)
+    real, intent(inout) :: emis(ncols,nrows,n_spca_spc,ntimes)
+    real, intent(in)    :: efmaps(ncols,nrows,19) !only 19
+    !mgn2mech variables:
+    integer :: nmpmg,nmpsp,nmpmc,s,t
+    real    :: tmper(ncols, nrows, n_spca_spc,ntimes)       ! Temp emission buffer
+
+    !from mgn2mech ---------
+    print*,"MGN2MECH.."
+    tmper = 0.
+    emis = 0.
+    
+    do s = 1, n_smap_spc
+      nmpmg = mg20_map(s) !megan category  [1-19]
+      nmpsp = spca_map(s) !megan specie    [1~200]
+
+      do t=1,ntimes
+         tmper(:,:,nmpsp,t) = non_dim_emis(:,:,nmpmg,t) * efmaps(:,:,nmpmg)  * effs_all(s)
+      enddo
+    enddo ! end species loop
+     tmper = tmper * nmol2mol
+
+    !3) Conversion from speciated species to MECHANISM species
+     ! lumping to MECHANISM species
+     do s = 1, n_scon_spc
+       nmpsp = spmh_map(s)         ! Mapping value for SPCA
+       nmpmc = mech_map(s)         ! Mapping value for MECHANISM
+       if ( nmpmc .ne. 999 ) then
+          emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s))
+       endif
+     enddo ! End species loop
+    !-----------------------------------------------------------------------
+end subroutine mgn2mech
+
+subroutine write_output_file(g,YYYY,DDD,MECHANISM)
+  implicit none
+  type(grid_type) , intent(in) :: g
+  character(len=5), intent(in) :: MECHANISM
+  character(len=4), intent(in) :: YYYY
+  character(len=3), intent(in) :: DDD
+  !local vars
+  integer             :: ncid,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
+  integer             :: k!,i,j
+  character(len=25)   :: out_file
+  
+  !Creo NetCDF file
+   out_file="out_"//YYYY//"_"//DDD//"_"//trim(MECHANISM)//".nc"
+   print*,"ESCRIBIENDO: ",out_file
+
+   !Crear NetCDF
+   call check(nf90_create(trim(out_file), NF90_CLOBBER, ncid))
+     !Defino dimensiones
+     call check(nf90_def_dim(ncid, "Time", 24     , t_dim_id       ))
+     call check(nf90_def_dim(ncid, "x"   , g%nx   , x_dim_id       ))
+     call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
+     !Defino variables
+     call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
+     call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
+     call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
+     !Creo variables:
+     do k=1,NMGNSPC !n_scon_spc !
+        !print*,"Especie: ",k,n_scon_spc,trim(mech_spc(k))
+        call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
+     end do
+   call check(nf90_enddef(ncid))   !End NetCDF define mode
+
+   !Abro NetCDF y guardo variables de salida
+   call check(nf90_open(trim(out_file), nf90_write, ncid       ))
+     do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
+       print*,"   Especie:",trim(mech_spc(k))
+       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer_all(:,:,k,:) ))
+     enddo
+   call check(nf90_close( ncid ))
+end subroutine write_output_file
+!0000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 
 subroutine check(status)
   integer, intent(in) :: status

@@ -3,8 +3,8 @@ MODULE MEGAN_V32
    implicit none
 
    !Version dependent parameters:
-   integer, parameter :: NrTyp = 6       !Number of "Canopy types": trees (needle,broad,tropical),shrub,grass,crop.
-   integer, parameter :: NCLASS = 19     !MEGAN Internal Emission Categories
+   integer, parameter :: NrTyp  = 6   !Number of "Canopy types": trees (needle,broad,tropical),shrub,grass,crop.
+   integer, parameter :: NCLASS = 19  !MEGAN Internal Emission Categories
    !---
    integer, save :: nmgnspc           !number of megan     species
    integer, save :: n_scon_spc        !number of mechanism species
@@ -15,22 +15,6 @@ MODULE MEGAN_V32
    real,allocatable :: mech_mwt(:)
    character( 16 ), allocatable :: mech_spc(:)
 
-   INCLUDE 'tables/SPC_NOCONVER.EXT'
-   INCLUDE 'tables/SPC_CB05.EXT'
-   INCLUDE 'tables/SPC_CB6.EXT'
-   INCLUDE 'tables/SPC_CB6_AE7.EXT'
-   INCLUDE 'tables/SPC_RACM2.EXT'        ! new in MEGAN3
-   INCLUDE 'tables/SPC_CRACMM.EXT'       ! new in CMAQ 5.4
-   INCLUDE 'tables/MAP_CV2CB05.EXT'
-   INCLUDE 'tables/SPC_SAPRC07.EXT'      ! new in MEGAN3
-   INCLUDE 'tables/SPC_SAPRC07T.EXT'     ! new in MEGAN3
-   INCLUDE 'tables/MAP_CV2CB6.EXT'
-   INCLUDE 'tables/MAP_CV2CB6_AE7.EXT'
-   INCLUDE 'tables/MAP_CV2RACM2.EXT'
-   INCLUDE 'tables/MAP_CV2CRACMM.EXT'
-   INCLUDE 'tables/MAP_CV2SAPRC07.EXT'
-   INCLUDE 'tables/MAP_CV2SAPRC07T.EXT'
-   
    INCLUDE 'tables/MEGAN.EXT'
 
 contains
@@ -43,7 +27,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
              ctf, efmaps, ldf_in,                          & !lai,emis factors, light emis factors
              lsm,soil_type,soil_moisture,                  & !land surface model, soil type, soil_moisture
              tmp_max, tmp_min, wind_max, tmp_avg, rad_avg, & !meteo daily
-             emis                                          ) !out: Emision values
+             non_dimgarma) !emis                           ) !out: Emision values
 
     implicit none
     ! input variables
@@ -61,7 +45,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     real,   intent(in)     ::  soil_moisture(ncols,nrows)
 
     ! output variables 
-    real   ,intent(inout) :: emis(ncols,nrows,n_spca_spc)
+    !real   ,intent(inout) :: emis(ncols,nrows,n_spca_spc)
+    real    ,intent(inout) ::  non_dimgarma(ncols,nrows,nclass) !non-dimensional emissions of NCLASS megan species categories
     
     ! local variables
     integer :: s, t, i, j, k ! loop indices
@@ -90,7 +75,6 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
 
     !megvea local variables
     real                  :: ER !(ncols,nrows)                    !emission rate
-    real                  :: non_dimgarma (ncols,nrows,nclass)  !
 
     logical, parameter    :: gambd_yn  = .false. !.true.!
     logical, parameter    :: gamaq_yn  = .false. !.true.!
@@ -114,9 +98,9 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     REAL :: VPGWT(LAYERS)
     REAL :: SUM1,SUM2,Ea1L,Ea2L
     
-    !mgn2mech variables:
-    integer :: nmpmg,nmpsp,nmpmc
-    REAL    :: tmper(ncols, nrows, n_spca_spc)       ! Temp emission buffer
+    !@!mgn2mech variables:
+    !@integer :: nmpmg,nmpsp,nmpmc
+    !@REAL    :: tmper(ncols, nrows, n_spca_spc)       ! Temp emission buffer
  
     ! EA response to canopy temperature/light
     IF ( Layers .EQ. 5 ) THEN
@@ -245,7 +229,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
         ! EA response to co2
         if ( gamco2_yn ) then; gamco2=gamma_co2(co2)          ; else; gamco2 = 1.0; endif
 
-        do s=1,NCLASS ! Loop over all the emission classes !Now process all factors dependent on S:
+        do s=1,NCLASS ! Loop over all the emission classes
 
             IF ( S .EQ. 3 .OR. S .EQ. 4 .OR. S .EQ. 5 .OR. S .EQ. 6 ) THEN
                 LDFMAP = LDF_IN(i,j,S-2) ! only LDF 3, 4, 5, and 6 in file
@@ -290,9 +274,9 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
 
             !IF ( ER(I,J) .GT. 0.0 ) THEN
             IF ( ER .GT. 0.0 ) THEN
-                NON_DIMGARMA (i,j,s) = ER
-            ELSE                   
-                NON_DIMGARMA (i,j,s) = 0.0
+                non_dimgarma(i,j,s) = ER
+            ELSE                  
+                non_dimgarma(i,j,s) = 0.0
             END IF
         end do  ! End loop of species (S)
 
@@ -300,44 +284,44 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
   end do ! NROWS
 
 
-  !from mgn2mech ---------
-  !print*,"MGN2MECH.."
-  tmper = 0.
-  emis = 0.
+  !@!from mgn2mech ---------
+  !@!print*,"MGN2MECH.."
+  !@tmper = 0.
+  !@emis = 0.
 
-  do s = 1, n_smap_spc
-    nmpmg = mg20_map(s) !megan category
-    nmpsp = spca_map(s) !megan specie
-  
-    IF ( nmpmg .NE. i_NO ) then !...  Not NO
-       tmper(:,:,nmpsp) = non_dimgarma(:,:,nmpmg) * efmaps(:,:,nmpmg)  * effs_all(s)
-    ELSEIF ( nmpmg .EQ. i_NO ) then
-       tmper(:,:,nmpsp) = 0.0 ! not NO produced  by plants
-      !@!!-----------------NO Stuff-----------------------
-      !@IF ( .NOT. BDSNP_MEGAN ) THEN
-      !@!     GAMNO is emission activity factor
-      !@   tmper(:,:,nmpsp) = GAMNO(:,:) * efmaps(:,:,i_NO)        * effs_all(s)
-      !@ELSE
-      !@! directly use BDSNP soil NO
-      !@  tmper(nmpsp,:,:) = BDSNP_NO(:,:)
-      !@ENDIF
-      !@!-----------------end of NO----------------------
-    ENDIF     !IF ( nmpmg .NE. i_NO ) then
-  enddo ! end species loop
-  !.....3) Conversion from speciated species to MECHANISM species
-   tmper = tmper * nmol2mol
+  !@do s = 1, n_smap_spc
+  !@  nmpmg = mg20_map(s) !megan category
+  !@  nmpsp = spca_map(s) !megan specie
+  !@
+  !@  IF ( nmpmg .NE. i_NO ) then !...  Not NO
+  !@     tmper(:,:,nmpsp) = non_dimgarma(:,:,nmpmg) * efmaps(:,:,nmpmg)  * effs_all(s)
+  !@  ELSEIF ( nmpmg .EQ. i_NO ) then
+  !@     tmper(:,:,nmpsp) = 0.0   ! not NO produced by plants
+  !@    !@!!-----------------NO Stuff-----------------------
+  !@    !@IF ( .NOT. BDSNP_MEGAN ) THEN
+  !@    !@!     GAMNO is emission activity factor
+  !@    !@   tmper(:,:,nmpsp) = GAMNO(:,:) * efmaps(:,:,i_NO)        * effs_all(s)
+  !@    !@ELSE
+  !@    !@! directly use BDSNP soil NO
+  !@    !@  tmper(nmpsp,:,:) = BDSNP_NO(:,:)
+  !@    !@ENDIF
+  !@    !@!-----------------end of NO----------------------
+  !@  ENDIF     !IF ( nmpmg .NE. i_NO ) then
+  !@enddo ! end species loop
+  !@!.....3) Conversion from speciated species to MECHANISM species
+  !@ tmper = tmper * nmol2mol
 
-   ! lumping to MECHANISM species
-   do s = 1, n_scon_spc
-     nmpsp = spmh_map(s)         ! Mapping value for SPCA
-     nmpmc = mech_map(s)         ! Mapping value for MECHANISM
-     if ( nmpmc .ne. 999 ) then
-        emis(:,:,nmpmc) = emis(:,:,nmpmc) +  (tmper(:,:,nmpsp) * conv_fac(s))
-     endif
-   ENDDO ! End species loop
-  !-----------------------------------------------------------------------
+  !@ ! lumping to MECHANISM species
+  !@ do s = 1, n_scon_spc
+  !@   nmpsp = spmh_map(s)         ! Mapping value for SPCA
+  !@   nmpmc = mech_map(s)         ! Mapping value for MECHANISM
+  !@   if ( nmpmc .ne. 999 ) then
+  !@      emis(:,:,nmpmc) = emis(:,:,nmpmc) +  (tmper(:,:,nmpsp) * conv_fac(s))
+  !@   endif
+  !@ enddo ! End species loop
+  !@!-----------------------------------------------------------------------
 
-  RETURN
+  return
     
 contains
 
