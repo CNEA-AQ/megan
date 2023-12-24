@@ -8,7 +8,7 @@ contains
 subroutine megan_nox(yyyy,ddd,hh,  &
            ncols,nrows,            &
            lat,                    &
-           tmp,precadj,            &
+           tmp,rain,               &
            lsm,styp,stemp,smois,   &
            ctf, lai,               &
            no_emis                 )
@@ -17,7 +17,7 @@ subroutine megan_nox(yyyy,ddd,hh,  &
   !input variables:
   integer, intent(in)  :: yyyy,ddd,hh
   integer, intent(in)  :: ncols,nrows
-  real   , intent(in), dimension(ncols,nrows)   :: lat,tmp,stemp,smois,precadj,lai
+  real   , intent(in), dimension(ncols,nrows)   :: lat,tmp,stemp,smois,rain,lai
   integer, intent(in), dimension(ncols,nrows)   :: styp
   real   , intent(in), dimension(ncols,nrows,6) :: ctf 
   character(len=4), intent(in) :: lsm          !land surface model 
@@ -28,7 +28,7 @@ subroutine megan_nox(yyyy,ddd,hh,  &
   !local variables:
   real    :: CFNO, CFNOG                  !  NO correction factor !  NO correction factor (for grass)
   real    :: CFNOWET,CFNODRY,CF,CFG
-  real    :: TAIR,SMOI,TSOI,PRECI,LATI,LAIv
+  real    :: TAIR,SMOI,TSOI,PREC_ADJ,LATI,LAIv
   integer :: ISTYP,MAXSTYPES
   real    :: CANF(6)
   real, allocatable :: wsat(:)            ! ver como calcular !
@@ -56,16 +56,15 @@ subroutine megan_nox(yyyy,ddd,hh,  &
        TAIR  =   tmp(i,j)  !  air temperature (K)
        SMOI  = smois(i,j)  !  soil moisture (m3/m3)
        TSOI  = stemp(i,j)  !  soil temperature (K)
-       PRECI = precadj(i,j)!  precip adjustment (mm?)
+     PREC_ADJ= precipfact(rain(i,j))!  precip adjustment factor
        LATI  = lat(i,j)    !  latitude
        ISTYP = styp(i,j)   !  soil type
        CANF  = ctf(i,j,:)
        LAIv  = lai(i,j)
-       call growseason(yyyy,ddd,LATI,gday,glen)
 
        !Check max bounds for temperature
-       !IF (TAIR > 315.0 ) TAIR = 315.0 !esto no tiene sentido
-       IF (TAIR > 303.0 ) TAIR = 303.0
+       !IF (TAIR > 315.0 ) TAIR = 315.0  !non-sense
+       IF( TAIR > 303.00 ) TAIR = 303.00 !
 
        !Calculate CFG:
        IF ( TAIR > 268.8690 ) THEN
@@ -104,7 +103,7 @@ subroutine megan_nox(yyyy,ddd,hh,  &
             END IF
             
             IF( ISTYP > 0 .AND. ISTYP <= MAXSTYPES ) THEN
-               IF( WSAT(ISTYP) .eq. 0) THEN ! first ldesid diag call. Do nothing.
+               IF( WSAT(ISTYP) .eq. 0 ) THEN ! first ldesid diag call. Do nothing.
                  CF = 0.
                ELSE
                  RATIO = SMOI / WSAT(ISTYP)
@@ -115,9 +114,11 @@ subroutine megan_nox(yyyy,ddd,hh,  &
             END IF
        END IF  ! endif have_soil_fields
                                                                                         
-       CFNO = CF * FERTLZ_ADJ(gday,glen) * VEG_ADJ(laiv) * PRECI
-       if( CFNO .lt. 0 ) then; CFNO = 0; end if
+       CFNO = CF * FERTLZ_ADJ(gday,glen) * VEG_ADJ(laiv) * PREC_ADJ
+       if( CFNO .lt. 0 ) CFNO = 0
       !>>ENDSOILNOX
+      
+      call growseason(yyyy,ddd,LATI,gday,glen)
 
        IF (GDAY .EQ. 0) THEN                          ! non growing season ! CFNOG for everywhere
           NO_EMIS(i,j) = CFNOG 
@@ -219,6 +220,57 @@ subroutine growseason (year,jday,lat,gday,glen)!!MEJORAR ESTA FUNCIÓN!!
     RETURN
 end subroutine growseason
 
+ REAL FUNCTION PRECIPFACT(RRATE)!, JDATE, JTIME, ADATE, ATIME )
+ ! This internal function computes a precipitation adjustment
+ ! factor from YL 1995 based on a rain rate. The pulse type is
+ ! and integer ranging from 0 to 3 indicating the type of rainfall rate.
+   IMPLICIT NONE
+   REAL   , intent (in) :: rrate !rainfall rate
+   !...  Function arguments
+   INTEGER :: PULSETYPE
+   integer ::  HRDIFF = 1.0 !SECSDIFF( ADATE, ATIME, JDATE, JTIME ) / 3600.
+   !pulse type
+   IF( RRATE < 0.1 ) THEN
+       PULSETYPE = 0
+   ELSE IF( RRATE < 0.5 ) THEN
+       PULSETYPE = 1
+   ELSE IF( RRATE < 1.5 ) THEN
+       PULSETYPE = 2
+   ELSE
+       PULSETYPE = 3
+   ENDIF
+
+   SELECT CASE( PULSETYPE )
+   CASE( 0 )
+       PRECIPFACT = 1.
+   CASE( 1 )
+       IF( ( HRDIFF / 24. ) < 2. ) THEN
+           PRECIPFACT = 11.19 * EXP(-0.805*(HRDIFF+24)/24.)
+       ELSE
+           PULSETYPE = 0
+           PRECIPFACT = 1.
+       ENDIF
+   CASE( 2 )
+       IF( ( HRDIFF / 24. ) < 6. ) THEN
+           PRECIPFACT = 14.68 * EXP(-0.384*(HRDIFF+24)/24.)
+       ELSE
+           PULSETYPE = 0
+           PRECIPFACT = 1.
+       ENDIF
+   CASE DEFAULT
+       IF( ( HRDIFF / 24. ) < 13. ) THEN
+           PRECIPFACT = 18.46 * EXP(-0.208*(HRDIFF+24)/24.)
+       ELSE
+           PULSETYPE = 0
+           PRECIPFACT = 1.
+       ENDIF
+   END SELECT
+
+   RETURN
+
+ END FUNCTION PRECIPFACT
+
 end subroutine megan_nox
+
 
 end module nox_mod
