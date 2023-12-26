@@ -32,7 +32,7 @@ subroutine megan_nox(yyyy,ddd,hh,  &
   integer :: ISTYP,MAXSTYPES
   real    :: CANF(6)
   real, allocatable :: wsat(:)            ! ver como calcular !
-  real :: fac1,fac2,tmo1,tmo2,ratio
+  real    :: fac1,fac2,tmo1,tmo2,ratio
   integer :: gday,glen
   logical :: have_soil_fields=.true.
 

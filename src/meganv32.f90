@@ -1,5 +1,5 @@
 MODULE MEGAN_V32
-
+use netcdf
    implicit none
 
    !Version dependent parameters:
@@ -9,10 +9,10 @@ MODULE MEGAN_V32
    integer, save :: nmgnspc           !number of megan     species
    integer, save :: n_scon_spc        !number of mechanism species
    character( 16 ), allocatable :: megan_names(:)     ! megan species names
-   integer, allocatable ::  spmh_map(:),mech_map(:)   ! speciated species name
+   integer,         allocatable ::  spmh_map(:),mech_map(:)   ! speciated species name
 
-   real, allocatable :: conv_fac(:)
-   real,allocatable :: mech_mwt(:)
+   real,            allocatable :: conv_fac(:)
+   real,            allocatable :: mech_mwt(:)
    character( 16 ), allocatable :: mech_spc(:)
 
    INCLUDE 'tables/MEGAN.EXT'
@@ -36,42 +36,45 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     real,    intent(in), dimension(ncols,nrows)   :: lat, long, temp, rad, wind, pres, qv, laip,laic
     real,    intent(in), dimension(ncols,nrows)   :: tmp_avg,rad_avg,tmp_min,tmp_max,wind_max
 
-    real, intent(in) :: ctf(ncols,nrows,nrtyp) !canopy type factor array
-    real, intent(in) :: efmaps(ncols,nrows,19) !only 19
-    real, intent(in) :: ldf_in(ncols,nrows,4 ) !only 4 use maps
+    real,    intent(in)     :: ctf(ncols,nrows,nrtyp) !canopy type factor array
+    real,    intent(in)     :: efmaps(ncols,nrows,19) !only 19
+    real,    intent(in)     :: ldf_in(ncols,nrows,4 ) !only 4 use maps
 
     character(len=4),intent(in)   :: LSM          !land surface model 
-    integer,intent(in)     ::  soil_type(ncols,nrows)
-    real,   intent(in)     ::  soil_moisture(ncols,nrows)
+    integer, intent(in)     ::  soil_type(ncols,nrows)
+    real,    intent(in)     ::  soil_moisture(ncols,nrows)
 
     ! output variables 
     !real   ,intent(inout) :: emis(ncols,nrows,n_spca_spc)
-    real    ,intent(inout) ::  non_dimgarma(ncols,nrows,nclass) !non-dimensional emissions of NCLASS megan species categories
+    real,    intent(inout)  ::  non_dimgarma(ncols,nrows,nclass) !non-dimensional emissions of NCLASS megan species categories
     
     ! local variables
     integer :: s, t, i, j, k ! loop indices
     integer :: mm, dd
 
     ! megcan local variables 
-     real    :: TotalCT
-     real    :: month,day,hour
-     real    :: SinZenith, Zenith!Sinbeta, Beta
-     REAL    :: Solar, Maxsolar,Eccentricity,    &
-          Difffrac, PPFDfrac, QbAbsn,            &
-          Trate, Qbeamv,Qdiffv, Qbeamn, Qdiffn,  &
-          QbAbsV,Ea1tCanopy, Ea1pCanopy,         &
-          TairK0, HumidairPa0, Ws0, SH
-     REAL,DIMENSION(LAYERS) :: VPgausWt, VPgausDis2,VPgausDis, VPslwWT, &
-          QdAbsV, QsAbsV, QdAbsn,QsAbsn,                              &
-          SunQv, ShadeQv, SunQn, ShadeQn,                             &
-          TairK, HumidairPa, Ws, SunleafSH, sun_ppfd,shade_ppfd,      &
-          SunleafLH,SunleafIR, ShadeleafSH, sun_tk,shade_tk,sun_frac, &
-          ShadeleafLH,ShadeleafIR, sun_ppfd_total, shade_ppfd_total,  &
-          sun_tk_total, shade_tk_total, sun_frac_total
-    real, dimension(layers) :: sunt,shat,sunf,sunp,shap
+    real   :: TotalCT
+    real   :: month,day,hour
+    real   :: SinZenith, Zenith!Sinbeta, Beta
+    real   :: Solar, Maxsolar,Eccentricity,    &
+         Difffrac, PPFDfrac, QbAbsn,           &
+         Trate, Qbeamv,Qdiffv, Qbeamn, Qdiffn, &
+         QbAbsV,Ea1tCanopy, Ea1pCanopy,        &
+         TairK0, HumidairPa0, Ws0, SH
+    real,dimension(LAYERS) :: VPgausWt, VPgausDis2,VPgausDis, VPslwWT, &
+         QdAbsV, QsAbsV, QdAbsn,QsAbsn,                              &
+         SunQv, ShadeQv, SunQn, ShadeQn,                             &
+         TairK, HumidairPa, Ws, SunleafSH, sun_ppfd,shade_ppfd,      &
+         SunleafLH,SunleafIR, ShadeleafSH, sun_tk,shade_tk,sun_frac, &
+         ShadeleafLH,ShadeleafIR, sun_ppfd_total, shade_ppfd_total,  &
+         sun_tk_total, shade_tk_total, sun_frac_total
+
+    real,dimension(layers) :: sunt,shat,sunf,sunp,shap
+    !@@real,dimension(ncols,nrows,layers) :: sunt,shat,sunp,shap,sunf
 
     !megsea local variables:
-    real, allocatable :: wwlt(:)
+    real,allocatable :: wwlt(:)
+    real :: wilt_map(ncols,nrows)
 
     !megvea local variables
     real                  :: ER !(ncols,nrows)                    !emission rate
@@ -83,21 +86,27 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     logical, parameter    :: gamhw_yn  = .false. !.true.!
     logical, parameter    :: gamco2_yn = .false. !.true.!
     logical, parameter    :: gamsm_yn  = .false. !.true.! ! for the cmaq implementation of megan  we refer to soil moisture at layer 2, which is 1 meter for px and 0.5 m for noah.Keep this in mind when enabling the GAMSM stress.
-    real  :: cdea(layers) ! Emission response to canopy depth
+    real  :: cdea(layers)! Emission response to canopy depth
     real  :: gamla       ! EA leaf age response
     real  :: gamaq       ! EA response to air pollution
     real  :: gambd       ! EA bidirectional exchange LAI response
     real  :: gamht       ! EA response to high temperature
     real  :: gamlt       ! EA response to low temperature
     real  :: gamhw       ! EA response to high wind speed
-    real  :: gamsm       ! EA response to soil moisture
+    !real  :: gamsm       ! EA response to soil moisture
+    real  :: gamsm(ncols,nrows)       ! EA response to soil moisture
     real  :: gamco2      ! EA response to CO2
     real  :: gamtp       ! combines GAMLD, GAMLI, GAMP to get canopy average
     real  :: ldfmap      ! light depenedent fraction map
 
     REAL :: VPGWT(LAYERS)
     REAL :: SUM1,SUM2,Ea1L,Ea2L
-    
+ 
+
+ !debug variables:
+ integer :: ierr,var_id,ncid,col_dim_id,row_dim_id,lvl_dim_id
+
+
     !@!mgn2mech variables:
     !@integer :: nmpmg,nmpsp,nmpmc
     !@REAL    :: tmper(ncols, nrows, n_spca_spc)       ! Temp emission buffer
@@ -115,7 +124,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
         end do
     ENDIF
 
-    select case (LSM)
+    select case (trim(LSM))
            case ('NOAH' )
               allocate(wwlt(size(wwlt_noah))); wwlt=wwlt_noah;
            case ('JN90' )
@@ -129,11 +138,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
 
         !from megcan -----------
         !print*,"MEGCAN.."
-        sunt(:) = temp(i,j) !default values for output
-        shat(:) = temp(i,j)
-        sunp(:) = rad(i,j)
-        shap(:) = rad(i,j)
-        sunf(:) = 1.0
+        sunt(:) = temp(i,j) !default values for output !sunt(i,j,:) = temp(i,j) !
+        shat(:) = temp(i,j)                            !shat(i,j,:) = temp(i,j) !
+        sunp(:) = rad(i,j)                             !sunp(i,j,:) = rad(i,j)  !
+        shap(:) = rad(i,j)                             !shap(i,j,:) = rad(i,j)  !
+        sunf(:) = 1.0                                  !sunf(i,j,:) = 1.0       !
         TotalCT=sum(ctf(i,j,:)) !*0.01
         if (totalCT .gt. 0.0 .AND. LAIc(i,j) .gt. 0.0 ) then
 
@@ -145,15 +154,15 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
              hour  = hour - 24.0; day  = real(ddd)  + 1
            endif
 
-            TairK0   = temp(i,j)      !temp (from meteo)
-            Ws0      = wind(i,j)      !wind (from meteo)
-            Solar    = rad(i,j)/2.25  !solar rad. (from meteo) [W m-2] -> [umol photons m-2 s-1]
+           TairK0   = temp(i,j)      !temp (from meteo)
+           Ws0      = wind(i,j)      !wind (from meteo)
+           Solar    = rad(i,j)/2.25  !solar rad. (from meteo) [W m-2] -> [umol photons m-2 s-1]
 
            !(1) calc solar angle
-            zenith      = CalcZenith(day,lat(i,j),hour)
-            SinZenith   = sin(zenith / 57.29578) !57.29578=rad2deg
-            Eccentricity= CalcEccentricity(Day)
-            Maxsolar = SinZenith * SolarConstant * Eccentricity
+           zenith      = CalcZenith(day,lat(i,j),hour)
+           SinZenith   = sin(zenith / 57.29578) !57.29578=rad2deg
+           Eccentricity= CalcEccentricity(Day)
+           Maxsolar = SinZenith * SolarConstant * Eccentricity
 
            !(2) gaussian dist.
            call GaussianDist(VPgausDis, layers)
@@ -161,52 +170,52 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
            !(3) determine fraction of diffuse PPFD, direct PPFD, diffuse near IR, direct near IR
            call SolarFractions(Solar, Maxsolar, Qdiffv, Qbeamv, Qdiffn, Qbeamn)
 
-            sun_ppfd_total  = 0.0
-            shade_ppfd_total= 0.0
-            sun_tk_total    = 0.0
-            shade_tk_total  = 0.0
-            sun_frac_total  = 0.0
+           sun_ppfd_total  = 0.0
+           shade_ppfd_total= 0.0
+           sun_tk_total    = 0.0
+           shade_tk_total  = 0.0
+           sun_frac_total  = 0.0
 
-            do k = 1,NRTYP   !canopy types
-              if ( ctf(i,j,k) .ne. 0.0 ) then
-                 sun_ppfd   = 0.0
-                 shade_ppfd = 0.0
-                 sun_tk     = 0.0
-                 shade_tk   = 0.0
-                 sun_frac   = 0.0
+           do k = 1,NRTYP   !canopy types
+             if ( ctf(i,j,k) .ne. 0.0 ) then
+                sun_ppfd   = 0.0
+                shade_ppfd = 0.0
+                sun_tk     = 0.0
+                shade_tk   = 0.0
+                sun_frac   = 0.0
 
-                 !(4) canopy radiation dist (ppdf)
-                 !
-                 call CanopyRad(VPgausDis, layers, LAIc(i,j), SinZenith,       & !in
-                       Qbeamv, Qdiffv, Qbeamn, Qdiffn, k, Canopychar, sun_frac,& !in
-                       QbAbsV, QdAbsV, QsAbsV, QbAbsn, QdAbsn, QsAbsn, SunQv,  & !in
-                       ShadeQv, SunQn, ShadeQn, sun_ppfd, shade_ppfd,          & !out
-                       NrCha,NrTyp)
+                !(4) canopy radiation dist (ppdf)
+                !
+                call CanopyRad(VPgausDis, layers, LAIc(i,j), SinZenith,       & !in
+                      Qbeamv, Qdiffv, Qbeamn, Qdiffn, k, Canopychar, sun_frac,& !in
+                      QbAbsV, QdAbsV, QsAbsV, QbAbsn, QdAbsn, QsAbsn, SunQv,  & !in
+                      ShadeQv, SunQn, ShadeQn, sun_ppfd, shade_ppfd,          & !out
+                      NrCha,NrTyp)
 
-                 HumidairPa0  =  WaterVapPres(qv(i,j), pres(i,j), waterairratio)
-                 Trate        =  Stability(Canopychar, k, Solar , NrCha, NrTyp)
-                 !(5) canopy energy balance (temp)
-                 !
-                 call CanopyEB(Trate, Layers, VPgausDis, Canopychar, k,    &
-                       TairK, HumidairPa, Ws, sun_ppfd,                    &
-                       shade_ppfd, SunQv, ShadeQv, SunQn, ShadeQn,         &
-                       sun_tk, SunleafSH, SunleafLH, SunleafIR,            &
-                       shade_tk,ShadeleafSH,ShadeleafLH,ShadeleafIR,       &
-                       NrCha, NrTyp, Ws0, TairK0, HumidairPa0)
-                 !(6) compute output variables
-                 !
-                 sun_ppfd_total(:)   = sun_ppfd_total(:)   + sun_ppfd(:)  * ctf(i,j,k)!*0.01
-                 shade_ppfd_total(:) = shade_ppfd_total(:) + shade_ppfd(:)* ctf(i,j,k)!*0.01
-                 sun_tk_total(:)     = sun_tk_total(:)     + sun_tk(:)    * ctf(i,j,k)!*0.01
-                 shade_tk_total(:)   = shade_tk_total(:)   + shade_tk(:)  * ctf(i,j,k)!*0.01
-                 sun_frac_total(:)   = sun_frac_total(:)   + sun_frac(:)  * ctf(i,j,k)!*0.01
-              endif
-            enddo
-                sunt(:) = sun_tk_total(:)/TotalCT
-                shat(:) = shade_tk_total(:)/TotalCT
-                sunp(:) = sun_ppfd_total(:)/TotalCT
-                shap(:) = shade_ppfd_total(:)/TotalCT
-                sunf(:) = sun_frac_total(:)/TotalCT
+                HumidairPa0  =  WaterVapPres(qv(i,j), pres(i,j), waterairratio)
+                Trate        =  Stability(Canopychar, k, Solar , NrCha, NrTyp)
+                !(5) canopy energy balance (temp)
+                !
+                call CanopyEB(Trate, Layers, VPgausDis, Canopychar, k,    &
+                      TairK, HumidairPa, Ws, sun_ppfd,                    &
+                      shade_ppfd, SunQv, ShadeQv, SunQn, ShadeQn,         &
+                      sun_tk, SunleafSH, SunleafLH, SunleafIR,            &
+                      shade_tk,ShadeleafSH,ShadeleafLH,ShadeleafIR,       &
+                      NrCha, NrTyp, Ws0, TairK0, HumidairPa0)
+                !(6) compute output variables
+                !
+                sun_ppfd_total(:)   = sun_ppfd_total(:)   + sun_ppfd(:)  * ctf(i,j,k)!*0.01
+                shade_ppfd_total(:) = shade_ppfd_total(:) + shade_ppfd(:)* ctf(i,j,k)!*0.01
+                sun_tk_total(:)     = sun_tk_total(:)     + sun_tk(:)    * ctf(i,j,k)!*0.01
+                shade_tk_total(:)   = shade_tk_total(:)   + shade_tk(:)  * ctf(i,j,k)!*0.01
+                sun_frac_total(:)   = sun_frac_total(:)   + sun_frac(:)  * ctf(i,j,k)!*0.01
+             endif
+           enddo
+           sunt(:) = sun_tk_total(:)    / TotalCT  !sunt(i,j,:) = sun_tk_total(:)    / TotalCT !
+           shat(:) = shade_tk_total(:)  / TotalCT  !shat(i,j,:) = shade_tk_total(:)  / TotalCT !
+           sunp(:) = sun_ppfd_total(:)  / TotalCT  !sunp(i,j,:) = sun_ppfd_total(:)  / TotalCT !
+           shap(:) = shade_ppfd_total(:)/ TotalCT  !shap(i,j,:) = shade_ppfd_total(:)/ TotalCT !
+           sunf(:) = sun_frac_total(:)  / TotalCT  !sunf(i,j,:) = sun_frac_total(:)  / TotalCT !
 
         else if (totalCT .lt. 0) then
                print*,"Send ERROR message!"             !Send ERROR message!
@@ -218,7 +227,9 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
         !print*,"MEGSEA.."
         !from megsea -----------
         !EA response to Soil Moisture
-        gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
+        !gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
+        wilt_map(i,j)=wwlt(soil_type(i,j)) !debug
+        gamsm(i,j)=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
 
         !from megvea -----------
         !print*,"MEGVEA.."
@@ -251,20 +262,23 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
             SUM2 = 0.0
             do k = 1, layers
               
-              Ea1L = CDEA(K) *                                                                       &
-                    GAMTLD(SunT(k),tmp_avg(i,j),S) *  GAMP(SunP(k),rad_avg(i,j)) *        SunF(k)  + &! *2.025 is the conversion to PPFD. 
-                    GAMTLD(ShaT(k),tmp_avg(i,j),S) *  GAMP(ShaP(k),rad_avg(i,j)) * (1.0 - SunF(k) )   ! *2.025 is the conversion to PPFD. 
-              SUM1 = SUM1 + Ea1L*VPGWT(K)
+              Ea1L = CDEA(K) * GAMTLD(SunT(k),tmp_avg(i,j),S) * GAMP(SunP(k),rad_avg(i,j)) *        SunF(k)  + &! *2.025 is the conversion to PPFD. 
+                               GAMTLD(ShaT(k),tmp_avg(i,j),S) * GAMP(ShaP(k),rad_avg(i,j)) * (1.0 - SunF(k) )   ! *2.025 is the conversion to PPFD. 
+              !Ea1L = CDEA(K) * GAMTLD(SunT(i,j,k),tmp_avg(i,j),S) * GAMP(SunP(i,j,k),rad_avg(i,j)) *        SunF(i,j,k)  + &!*        SunF(k)  + &
+              !                 GAMTLD(ShaT(i,j,k),tmp_avg(i,j),S) * GAMP(ShaP(i,j,k),rad_avg(i,j)) * (1.0 - SunF(i,j,k) )   !* (1.0 - SunF(k) )   
 
-              Ea2L = GAMTLI(SunT(k),S) * SunF(k)   +    GAMTLI(ShaT(k),S) * (1.0-SunF(k))
-              SUM2 = SUM2 + Ea2L*VPGWT(K)
-            end do   ! end do canopy layers
+              SUM1 = SUM1 + Ea1L * VPGWT(K)
+
+              Ea2L = GAMTLI(SunT(k),S) * SunF(k) + GAMTLI(ShaT(k),S) * (1.0-SunF(k))
+              !Ea2L = GAMTLI(SunT(i,j,k),S) * SunF(i,j,k) + GAMTLI(ShaT(i,j,k),S) * (1.0-SunF(i,j,k))
+              SUM2 = SUM2 + Ea2L * VPGWT(K)
+            end do ! end do canopy layers
 
             GAMTP = SUM1*LDFMAP + SUM2*( 1.0-LDFMAP )
 
             ! ... Calculate emission activity factors
             !ER(I,J) = LAIc(I,J) * GAMTP * GAMLA * GAMHW * GAMAQ* GAMHT * GAMLT *  GAMSM
-            ER = LAIc(I,J) * GAMTP * GAMLA * GAMHW * GAMAQ* GAMHT * GAMLT *  GAMSM
+            ER = LAIc(i,j) * GAMTP * GAMLA * GAMHW * GAMAQ * GAMHT * GAMLT * GAMSM(i,j)
 
             IF ( S .EQ. 1 ) THEN
                 ER =ER * GAMCO2  ! GAMCO2 only applied to isoprene
@@ -280,9 +294,40 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
             END IF
         end do  ! End loop of species (S)
 
-     end do   ! NCOLS
+     end do ! NCOLS
   end do ! NROWS
 
+!=========DEBUG
+        print*,"creando debug.nc.."
+        ierr=nf90_create("debug.nc", NF90_CLOBBER, ncid)
+           ! Defino dimensiones
+           ierr=nf90_def_dim(ncid, "COL" , ncols , col_dim_id)
+           ierr=nf90_def_dim(ncid, "ROW" , nrows , row_dim_id)
+           ierr=nf90_def_dim(ncid, "LVL" , layers, lvl_dim_id)
+           !Defino variables
+           !ierr=nf90_def_var(ncid,'SUNT'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+           !ierr=nf90_def_var(ncid,'SHAT'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+           !ierr=nf90_def_var(ncid,'SUNP'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+           !ierr=nf90_def_var(ncid,'SHAP'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+           !ierr=nf90_def_var(ncid,'SUNF'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+           ierr=nf90_def_var(ncid,'ISLTY' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+           ierr=nf90_def_var(ncid,'GAMSM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+           ierr=nf90_def_var(ncid,'WILT'  ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+        ierr=nf90_enddef(ncid)
+        print*,"Escribiendo variables.."
+        ierr=nf90_open("debug.nc", NF90_WRITE, ncid )
+           !ierr=nf90_inq_varid(ncid,'SUNT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNT   )
+           !ierr=nf90_inq_varid(ncid,'SHAT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SHAT   )
+           !ierr=nf90_inq_varid(ncid,'SUNP'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNP   )
+           !ierr=nf90_inq_varid(ncid,'SHAP'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SHAP   )
+           !ierr=nf90_inq_varid(ncid,'SUNF'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNF   )
+           ierr=nf90_inq_varid(ncid,'ISLTY'  ,var_id  );ierr=nf90_put_var(ncid, var_id ,soil_type)
+           ierr=nf90_inq_varid(ncid,'GAMSM'  ,var_id  );ierr=nf90_put_var(ncid, var_id ,  GAMSM  )
+           ierr=nf90_inq_varid(ncid,'WILT'   ,var_id  );ierr=nf90_put_var(ncid, var_id , wilt_map)
+        ierr=nf90_close(ncid)
+print*,"Hay una diferencia en el valor de WILT con respecto a CMAQ, hay que revisar eso!"
+stop
+!=====================================
 
   !@!from mgn2mech ---------
   !@!print*,"MGN2MECH.."

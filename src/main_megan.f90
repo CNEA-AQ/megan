@@ -155,7 +155,8 @@ program main
              lai, lai,                                 &  !LAI (past), LAI (current),
              ctf, ef, ldf_in,                          &  !CTF, EF, LDF
              lsm,stype,smois,                          &  !mesea Inps: land surface model, soil type, soil moisture!
-             tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,&  !max temp, min temp, max wind, daily temp and daily ppfd
+             tmp,tmp,wind,tmp,ppfd,                    &  !max temp, min temp, max wind, daily temp and daily ppfd
+            !tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,&  !max temp, min temp, max wind, daily temp and daily ppfd
              out_buffer(:,:,:,atoi(HH))                )  !Emis array
 
      print*,"MEGAN NOX"
@@ -372,6 +373,7 @@ subroutine get_hourly_data(g,t)
     call check( nf90_inq_varid(ncid,'RAINNC', var_id)); call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
     call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  LAI, [1,1,t]  ))
     call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t]))
+    !call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,2,t]))
     call check( nf90_inq_varid(ncid,'TSLB'  , var_id)); call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t]))
   call check(nf90_close(ncid))
               
