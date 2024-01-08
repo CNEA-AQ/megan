@@ -187,8 +187,8 @@ subroutine bdsnp_nox( yyyy,ddd,hh,                  &
 
          ! sum various quantities for daily averaging
          EMPOLSUM = EMPOLSUM + EMPOL
-         BASESUM(i,j)  = BASESUM(i,j)  + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM)          *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
-         PULSEAVG(i,j) = PULSEAVG(i,j) + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM * PULSE ) *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
+         BASESUM(i,j)  = BASESUM(i,j)  + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM)            *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
+         PULSEAVG(i,j) = PULSEAVG(i,j) + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM   * PULSE ) *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
          CRFAVG(i,j)   = CRFAVG(i,j)   + ( A_BIOME(K) + A_FERT ) * ( TEMP_TERM * WET_TERM ) * ( 1.d0 - CRF_TERM  ) *  3600.0 * 10.0**-9 ![ng N/m2/s] *  s/hr * g/ng
         !--------- MORE DIAGNOSTICS  ---------------------------------
          A_DIAG( i,j ) = A_BIOME(K)

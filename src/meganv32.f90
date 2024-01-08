@@ -15,6 +15,7 @@ use netcdf
    real,            allocatable :: mech_mwt(:)
    character( 16 ), allocatable :: mech_spc(:)
 
+   INCLUDE 'tables/LSM.EXT'
    INCLUDE 'tables/MEGAN.EXT'
 
 contains
@@ -128,11 +129,14 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
            case ('NOAH' )
               allocate(wwlt(size(wwlt_noah))); wwlt=wwlt_noah;
            case ('JN90' )
-              allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
+              !allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
+              !allocate(wwlt(size(WWLT_PX_WRFV3))); wwlt=WWLT_PX_WRFV3;
+              allocate(wwlt(size(WWLT_PX_WRFV4P))); wwlt=WWLT_PX_WRFV4P;
            case DEFAULT
-              allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
+              allocate(wwlt(size(WWLT_PX_WRFV3))); wwlt=WWLT_PX_WRFV3;
+              !allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
     end select
-
+   wilt_map=0.0
    do j = 1, NROWS
       do i = 1, NCOLS! preserve stride 1 for output arrays
 
@@ -229,7 +233,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
         !EA response to Soil Moisture
         !gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
         wilt_map(i,j)=wwlt(soil_type(i,j)) !debug
-        gamsm(i,j)=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
+        !gamsm(i,j)=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
+        gamsm(i,j)=1.0
 
         !from megvea -----------
         !print*,"MEGVEA.."
@@ -313,6 +318,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
            ierr=nf90_def_var(ncid,'ISLTY' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
            ierr=nf90_def_var(ncid,'GAMSM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
            ierr=nf90_def_var(ncid,'WILT'  ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+           ierr=nf90_def_var(ncid,'SOILM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+           ierr=nf90_def_var(ncid,'LAI'   ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
         ierr=nf90_enddef(ncid)
         print*,"Escribiendo variables.."
         ierr=nf90_open("debug.nc", NF90_WRITE, ncid )
@@ -324,9 +331,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
            ierr=nf90_inq_varid(ncid,'ISLTY'  ,var_id  );ierr=nf90_put_var(ncid, var_id ,soil_type)
            ierr=nf90_inq_varid(ncid,'GAMSM'  ,var_id  );ierr=nf90_put_var(ncid, var_id ,  GAMSM  )
            ierr=nf90_inq_varid(ncid,'WILT'   ,var_id  );ierr=nf90_put_var(ncid, var_id , wilt_map)
+           ierr=nf90_inq_varid(ncid,'SOILM'  ,var_id  );ierr=nf90_put_var(ncid, var_id , soil_moisture)
+           ierr=nf90_inq_varid(ncid,'LAI'    ,var_id  );ierr=nf90_put_var(ncid, var_id , laic    )
         ierr=nf90_close(ncid)
-print*,"Hay una diferencia en el valor de WILT con respecto a CMAQ, hay que revisar eso!"
-stop
+!print*,"Hay una diferencia en el valor de WILT con respecto a CMAQ, hay que revisar eso!"
+!stop
 !=====================================
 
   !@!from mgn2mech ---------
