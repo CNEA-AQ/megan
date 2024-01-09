@@ -75,18 +75,19 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
 
     !megsea local variables:
     real,allocatable :: wwlt(:)
-    real :: wilt_map(ncols,nrows)
+
+    logical, parameter :: gambd_yn  = .false. !.true. !
+    logical, parameter :: gamaq_yn  = .false. !.true. !
+    logical, parameter :: gamht_yn  = .false. !.true. !
+    logical, parameter :: gamlt_yn  = .false. !.true. !
+    logical, parameter :: gamhw_yn  = .false. !.true. !
+    logical, parameter :: gamco2_yn = .false. !.true. !
+    logical, parameter :: gamsm_yn  = .false. !.true. ! for the cmaq implementation of megan  we refer to soil moisture at layer 2, 
+                                                      !which is 1 meter for px and 0.5 m for noah. Keep this in mind when enabling the GAMSM stress.
 
     !megvea local variables
-    real                  :: ER !(ncols,nrows)                    !emission rate
+    real  :: ER          ! Emission rate
 
-    logical, parameter    :: gambd_yn  = .false. !.true.!
-    logical, parameter    :: gamaq_yn  = .false. !.true.!
-    logical, parameter    :: gamht_yn  = .false. !.true.!
-    logical, parameter    :: gamlt_yn  = .false. !.true.!
-    logical, parameter    :: gamhw_yn  = .false. !.true.!
-    logical, parameter    :: gamco2_yn = .false. !.true.!
-    logical, parameter    :: gamsm_yn  = .false. !.true.! ! for the cmaq implementation of megan  we refer to soil moisture at layer 2, which is 1 meter for px and 0.5 m for noah.Keep this in mind when enabling the GAMSM stress.
     real  :: cdea(layers)! Emission response to canopy depth
     real  :: gamla       ! EA leaf age response
     real  :: gamaq       ! EA response to air pollution
@@ -94,8 +95,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     real  :: gamht       ! EA response to high temperature
     real  :: gamlt       ! EA response to low temperature
     real  :: gamhw       ! EA response to high wind speed
-    !real  :: gamsm       ! EA response to soil moisture
-    real  :: gamsm(ncols,nrows)       ! EA response to soil moisture
+    real  :: gamsm       ! EA response to soil moisture
     real  :: gamco2      ! EA response to CO2
     real  :: gamtp       ! combines GAMLD, GAMLI, GAMP to get canopy average
     real  :: ldfmap      ! light depenedent fraction map
@@ -103,14 +103,12 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     REAL :: VPGWT(LAYERS)
     REAL :: SUM1,SUM2,Ea1L,Ea2L
  
-
- !debug variables:
- integer :: ierr,var_id,ncid,col_dim_id,row_dim_id,lvl_dim_id
-
-
-    !@!mgn2mech variables:
-    !@integer :: nmpmg,nmpsp,nmpmc
-    !@REAL    :: tmper(ncols, nrows, n_spca_spc)       ! Temp emission buffer
+    !@!debug variables:
+    !@!integer :: ierr,var_id,ncid,col_dim_id,row_dim_id,lvl_dim_id
+    !@!  diagnostic variables:
+    !@!real ::  wilt_map(ncols,nrows)
+    !@!real :: gamsm_map(ncols,nrows)       ! EA response to soil moisture
+    !@!real ::    ER_map(ncols,nrows)       !emission rate
  
     ! EA response to canopy temperature/light
     IF ( Layers .EQ. 5 ) THEN
@@ -136,7 +134,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
               allocate(wwlt(size(WWLT_PX_WRFV3))); wwlt=WWLT_PX_WRFV3;
               !allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
     end select
-   wilt_map=0.0
+
    do j = 1, NROWS
       do i = 1, NCOLS! preserve stride 1 for output arrays
 
@@ -228,16 +226,13 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
         endif
 
         !-----------------------
-        !print*,"MEGSEA.."
         !from megsea -----------
         !EA response to Soil Moisture
-        !gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
-        wilt_map(i,j)=wwlt(soil_type(i,j)) !debug
-        !gamsm(i,j)=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) )  
-        gamsm(i,j)=1.0
+        IF ( gamsm_yn )  THEN; gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) ); ELSE;  gamsm = 1.0; ENDIF 
+        !wilt_map(i,j)=wwlt(soil_type(i,j)) !debug
+        !gamsm_map(i,j)=gamsm               !debug
 
         !from megvea -----------
-        !print*,"MEGVEA.."
         ! Emission response to canopy depth
         cdea(:)=gamma_cd(layers,laic(i,j))  
         ! EA bidirectional exchange LAI response
@@ -282,8 +277,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
             GAMTP = SUM1*LDFMAP + SUM2*( 1.0-LDFMAP )
 
             ! ... Calculate emission activity factors
-            !ER(I,J) = LAIc(I,J) * GAMTP * GAMLA * GAMHW * GAMAQ* GAMHT * GAMLT *  GAMSM
-            ER = LAIc(i,j) * GAMTP * GAMLA * GAMHW * GAMAQ * GAMHT * GAMLT * GAMSM(i,j)
+            ER = LAIc(i,j) * GAMTP * GAMLA * GAMHW * GAMAQ * GAMHT * GAMLT * GAMSM
+            !er_map(i,j) = ER  !debug
 
             IF ( S .EQ. 1 ) THEN
                 ER =ER * GAMCO2  ! GAMCO2 only applied to isoprene
@@ -302,78 +297,38 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
      end do ! NCOLS
   end do ! NROWS
 
-!=========DEBUG
-        print*,"creando debug.nc.."
-        ierr=nf90_create("debug.nc", NF90_CLOBBER, ncid)
-           ! Defino dimensiones
-           ierr=nf90_def_dim(ncid, "COL" , ncols , col_dim_id)
-           ierr=nf90_def_dim(ncid, "ROW" , nrows , row_dim_id)
-           ierr=nf90_def_dim(ncid, "LVL" , layers, lvl_dim_id)
-           !Defino variables
-           !ierr=nf90_def_var(ncid,'SUNT'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
-           !ierr=nf90_def_var(ncid,'SHAT'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
-           !ierr=nf90_def_var(ncid,'SUNP'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
-           !ierr=nf90_def_var(ncid,'SHAP'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
-           !ierr=nf90_def_var(ncid,'SUNF'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
-           ierr=nf90_def_var(ncid,'ISLTY' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
-           ierr=nf90_def_var(ncid,'GAMSM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
-           ierr=nf90_def_var(ncid,'WILT'  ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
-           ierr=nf90_def_var(ncid,'SOILM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
-           ierr=nf90_def_var(ncid,'LAI'   ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
-        ierr=nf90_enddef(ncid)
-        print*,"Escribiendo variables.."
-        ierr=nf90_open("debug.nc", NF90_WRITE, ncid )
-           !ierr=nf90_inq_varid(ncid,'SUNT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNT   )
-           !ierr=nf90_inq_varid(ncid,'SHAT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SHAT   )
-           !ierr=nf90_inq_varid(ncid,'SUNP'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNP   )
-           !ierr=nf90_inq_varid(ncid,'SHAP'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SHAP   )
-           !ierr=nf90_inq_varid(ncid,'SUNF'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNF   )
-           ierr=nf90_inq_varid(ncid,'ISLTY'  ,var_id  );ierr=nf90_put_var(ncid, var_id ,soil_type)
-           ierr=nf90_inq_varid(ncid,'GAMSM'  ,var_id  );ierr=nf90_put_var(ncid, var_id ,  GAMSM  )
-           ierr=nf90_inq_varid(ncid,'WILT'   ,var_id  );ierr=nf90_put_var(ncid, var_id , wilt_map)
-           ierr=nf90_inq_varid(ncid,'SOILM'  ,var_id  );ierr=nf90_put_var(ncid, var_id , soil_moisture)
-           ierr=nf90_inq_varid(ncid,'LAI'    ,var_id  );ierr=nf90_put_var(ncid, var_id , laic    )
-        ierr=nf90_close(ncid)
-!print*,"Hay una diferencia en el valor de WILT con respecto a CMAQ, hay que revisar eso!"
-!stop
-!=====================================
-
-  !@!from mgn2mech ---------
-  !@!print*,"MGN2MECH.."
-  !@tmper = 0.
-  !@emis = 0.
-
-  !@do s = 1, n_smap_spc
-  !@  nmpmg = mg20_map(s) !megan category
-  !@  nmpsp = spca_map(s) !megan specie
-  !@
-  !@  IF ( nmpmg .NE. i_NO ) then !...  Not NO
-  !@     tmper(:,:,nmpsp) = non_dimgarma(:,:,nmpmg) * efmaps(:,:,nmpmg)  * effs_all(s)
-  !@  ELSEIF ( nmpmg .EQ. i_NO ) then
-  !@     tmper(:,:,nmpsp) = 0.0   ! not NO produced by plants
-  !@    !@!!-----------------NO Stuff-----------------------
-  !@    !@IF ( .NOT. BDSNP_MEGAN ) THEN
-  !@    !@!     GAMNO is emission activity factor
-  !@    !@   tmper(:,:,nmpsp) = GAMNO(:,:) * efmaps(:,:,i_NO)        * effs_all(s)
-  !@    !@ELSE
-  !@    !@! directly use BDSNP soil NO
-  !@    !@  tmper(nmpsp,:,:) = BDSNP_NO(:,:)
-  !@    !@ENDIF
-  !@    !@!-----------------end of NO----------------------
-  !@  ENDIF     !IF ( nmpmg .NE. i_NO ) then
-  !@enddo ! end species loop
-  !@!.....3) Conversion from speciated species to MECHANISM species
-  !@ tmper = tmper * nmol2mol
-
-  !@ ! lumping to MECHANISM species
-  !@ do s = 1, n_scon_spc
-  !@   nmpsp = spmh_map(s)         ! Mapping value for SPCA
-  !@   nmpmc = mech_map(s)         ! Mapping value for MECHANISM
-  !@   if ( nmpmc .ne. 999 ) then
-  !@      emis(:,:,nmpmc) = emis(:,:,nmpmc) +  (tmper(:,:,nmpsp) * conv_fac(s))
-  !@   endif
-  !@ enddo ! End species loop
-  !@!-----------------------------------------------------------------------
+!@!=========!DEBUG
+!@        print*,"creando debug.nc.."
+!@        ierr=nf90_create("debug.nc", NF90_CLOBBER, ncid)
+!@           ! Defino dimensiones
+!@           ierr=nf90_def_dim(ncid, "COL" , ncols , col_dim_id)
+!@           ierr=nf90_def_dim(ncid, "ROW" , nrows , row_dim_id)
+!@           ierr=nf90_def_dim(ncid, "LVL" , layers, lvl_dim_id)
+!@           !Defino variables
+!@           !ierr=nf90_def_var(ncid,'SUNT'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'SHAT'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'SUNP'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'SHAP'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'SUNF'  ,NF90_FLOAT,[col_dim_id,row_dim_id,lvl_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'ISLTY' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+!@           ierr=nf90_def_var(ncid,'GAMSM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+!@           ierr=nf90_def_var(ncid,'WILT'  ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'SOILM' ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+!@           !ierr=nf90_def_var(ncid,'LAI'   ,NF90_FLOAT,[col_dim_id,row_dim_id], var_id)
+!@        ierr=nf90_enddef(ncid)
+!@        ierr=nf90_open("debug.nc", NF90_WRITE, ncid )
+!@           !ierr=nf90_inq_varid(ncid,'SUNT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNT   )
+!@           !ierr=nf90_inq_varid(ncid,'SHAT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SHAT   )
+!@           !ierr=nf90_inq_varid(ncid,'SUNP'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNP   )
+!@           !ierr=nf90_inq_varid(ncid,'SHAP'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SHAP   )
+!@           !ierr=nf90_inq_varid(ncid,'SUNF'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  SUNF   )
+!@           !ierr=nf90_inq_varid(ncid,'ISLTY'  ,var_id  );ierr=nf90_put_var(ncid, var_id , soil_type)
+!@           !ierr=nf90_inq_varid(ncid,'SOILM'  ,var_id  );ierr=nf90_put_var(ncid, var_id , soil_moisture)
+!@           !ierr=nf90_inq_varid(ncid,'LAI'    ,var_id  );ierr=nf90_put_var(ncid, var_id , laic     )
+!@           ierr=nf90_inq_varid(ncid,'GAMSM'  ,var_id  );ierr=nf90_put_var(ncid, var_id , gamsm_map)
+!@           ierr=nf90_inq_varid(ncid,'WILT'   ,var_id  );ierr=nf90_put_var(ncid, var_id ,  wilt_map)
+!@        ierr=nf90_close(ncid)
+!@!=====================================
 
   return
     
@@ -441,11 +396,9 @@ contains
             Topt = 312.5 + 0.6 * (T240 - 297.0)
             X    = ((1.0 / Topt) - (1.0 / T1)) / 0.00831
             ! Maximum emission (relative to emission at 30 C)
-            Eopt = Cleo(S) * EXP(0.05 * (T24 - 297.0)) *          &
-                  Exp(0.05*(T240-297.0))
+            Eopt = Cleo(S) * EXP(0.05 * (T24 - 297.0)) * Exp(0.05*(T240-297.0))
 
-            GAMTLD= Eopt * Ct2 * Exp(Ct1(S) * X) /                &
-                  (Ct2 - Ct1(S) * (1.0 - EXP(Ct2 * X)))
+            GAMTLD= Eopt * Ct2 * Exp(Ct1(S) * X) / (Ct2 - Ct1(S) * (1.0 - EXP(Ct2 * X)))
         ENDIF
     END FUNCTION GAMTLD
     !----------------------------------------------------------------
@@ -453,13 +406,11 @@ contains
     !----------------------------------------------------------------
     function gamtli(temp,s)
         IMPLICIT NONE
-
         REAL           :: temp, GAMTLI
         REAL,PARAMETER :: Ts = 303.15
         INTEGER        :: S
 
         GAMTLI = exp( beta(S)*(temp-Ts) )
-
     end function gamtli
     !----------------------------------------------------------------
     ! EA Light response
@@ -538,7 +489,7 @@ contains
         ! output
         real               :: GAMHW
         ! local
-        real        :: t1
+        real               :: t1
 
             t1 = THW(S) + DTHW(S)
             IF (wind_max <= THW(S)) THEN
@@ -655,10 +606,6 @@ contains
     !======================================================================
 
 
-
-
-
-
 !oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 ! MEGCAN FUNCTIONS:                                             o
 !oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
@@ -667,7 +614,6 @@ contains
 !   Calculates the solar zenith angle
 !   Code originally developed by Alex Guenther in 1990s
 !   Coded into FORTRAN by Xuemei Wang
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION CalcZenith(Day, Lat, Hour)
       IMPLICIT NONE
       REAL    :: Day
@@ -684,7 +630,6 @@ FUNCTION CalcZenith(Day, Lat, Hour)
 END FUNCTION CalcZenith
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   FUNCTION CalcEccentricity
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION CalcEccentricity(Day)
       IMPLICIT NONE
       REAL    :: Day
@@ -694,7 +639,6 @@ FUNCTION CalcEccentricity(Day)
 END FUNCTION CalcEccentricity
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   SUBROUTINE GaussianDist
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 subroutine GaussianDist(Distgauss, Layers)
       IMPLICIT NONE
       INTEGER,INTENT(IN) ::  Layers
@@ -764,7 +708,6 @@ end subroutine SolarFractions
 !   Goudrian and van Laar (1994), Leuning (1997)
 !   Initial code 8-99, 
 !   modified 7-2000, 12-2001, 1-2017
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 SUBROUTINE CanopyRad(Distgauss, Layers, LAI, SinZenith,           &
                 Qbeamv, Qdiffv, Qbeamn, Qdiffn, Cantype,      &
                 Canopychar, Sunfrac, QbAbsV, QdAbsV, QsAbsV,  &
@@ -847,7 +790,6 @@ END SUBROUTINE CanopyRad
 !   Calculate light extinction coefficients
 !   Code originally developed by Alex Guenther in 1990s
 !   Coded into FORTRAN by Xuemei Wang
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 SUBROUTINE CalcExtCoeff(Qbeam,scat,kb,kd,reflb,kbp,kdp,QbeamAbsorb)
       IMPLICIT NONE
       REAL,INTENT(IN) :: Qbeam, scat, Kb, Kd
@@ -868,7 +810,6 @@ END SUBROUTINE CalcExtCoeff
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Code originally developed by Alex Guenther in 1990s
 !   Coded into FORTRAN by Xuemei Wang
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 SUBROUTINE CalcRadComponents(Qdiff, Qbeam, kdp, kbp, kb, scat, refld, reflb, LAIdepth, QdAbs, QsAbs)
       IMPLICIT NONE
       REAL,INTENT(IN)    :: Qdiff,Qbeam,kdp,kbp,kb,scat,refld,reflb,LAIdepth
@@ -890,8 +831,6 @@ END SUBROUTINE CalcRadComponents
 !   Note: i denotes an array containing a vertical profile 
 !         through the canopy with 0 (above canopy conditions) 
 !         plus 1 to number of canopy layers
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
-
 SUBROUTINE CanopyEB(Trate, Layers, Distgauss, Canopychar,            &
              Cantype, TairK, HumidairPa, Ws,                         &
              SunPPFD, ShadePPFD, SunQv, ShadeQv, SunQn, ShadeQn,     &
@@ -983,23 +922,18 @@ END SUBROUTINE CanopyEB
 !   Leaf energy balance
 !   Code originally developed by Alex Guenther in 1990s
 !   Coded into FORTRAN by Xuemei Wang
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 SUBROUTINE LeafEB(PPFD, Q, IRin, Eps, TranspireType,         &
          Lwidth, Llength, TairK, HumidairPa, Ws, Tleaf,      &
          SH, LH, IRout)
 
       IMPLICIT NONE
-
       REAL,INTENT(IN) :: Eps, TranspireType, Lwidth, Llength,PPFD, Q, IRin, TairK, HumidairPa, Ws
       REAL,INTENT(OUT) :: IRout, Tleaf, SH, LH
-
-! local variables
-
+      ! local variables
       INTEGER :: i
       REAL :: HumidAirKgm3,GHforced,StomRes,IRoutairT,LatHv,Ws1,      &
         LHairT,Tdelt,Balance,& !LeafBLC,& !LeafH,LeafLE,& !LHV,LeafIR,                 &
-        GH1,SH1,LH1,E1,IRout1,GH !,ConvertHumidityPa2kgm3 !ResSC,
-!     &        LHairT,Tdelt,Balance,LeafBLC,LeafH,LeafLE,LeafIRout,   
+        GH1,SH1,LH1,E1,IRout1,GH !,ConvertHumidityPa2kgm3 !ResSC,! &        LHairT,Tdelt,Balance,LeafBLC,LeafH,LeafLE,LeafIRout,   
 
       IF (Ws <= 0) THEN
         Ws1 = 0.001
@@ -1072,7 +1006,6 @@ END SUBROUTINE LeafEB
 !   Convert water mixing ratio (kg/kg) to water vapor pressure 
 !   (Pa or Kpa depending on units of input )
 !   Mixing ratio (kg/kg), temp (C), pressure (KPa)
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION WaterVapPres(Dens, Pres, WaterAirRatio)
       IMPLICIT NONE
       REAL :: Dens, Pres, WaterVapPres, WaterAirRatio
@@ -1080,7 +1013,6 @@ FUNCTION WaterVapPres(Dens, Pres, WaterAirRatio)
 END FUNCTION WaterVapPres
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   FUNCTION Stability
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION Stability(Canopychar, Cantype, Solar, NrCha, NrTyp)
       IMPLICIT NONE
       INTEGER :: Cantype, NrCha, NrTyp
@@ -1100,7 +1032,6 @@ FUNCTION Stability(Canopychar, Cantype, Solar, NrCha, NrTyp)
 END FUNCTION Stability
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Saturation vapor density  (kg/m3)
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION ConvertHumidityPa2kgm3(Pa, Tk)
       implicit none
       REAL              :: ConvertHumidityPa2kgm3, Pa, Tk
@@ -1108,7 +1039,6 @@ FUNCTION ConvertHumidityPa2kgm3(Pa, Tk)
 END FUNCTION ConvertHumidityPa2kgm3
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Leaf stomatal cond. resistance s m-1
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION ResSC(Par)
       IMPLICIT NONE
       REAL :: Par, SCadj, ResSC
@@ -1123,7 +1053,6 @@ END FUNCTION ResSC
 !   Calculate IR transfer between leaf and air
 !   Added by Alex Guenther and Ling Huang to replace previous
 !   MEGAN2.1 IR balance functions
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION LeafIR(Tk, Eps)
        IMPLICIT NONE
        REAL :: Eps, Tk, LeafIR
@@ -1131,7 +1060,6 @@ FUNCTION LeafIR(Tk, Eps)
 END FUNCTION LeafIR
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Latent Heat of vaporization(J Kg-1) from Stull p641
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION LHV(Tk)
       IMPLICIT NONE
       REAL :: Tk, LHV
@@ -1141,7 +1069,6 @@ FUNCTION LHV(Tk)
 END FUNCTION LHV
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Latent energy term in Energy balance
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION LeafLE(Tleaf, Ambvap, LatHv, GH, StomRes, TranspireType)
       IMPLICIT NONE
       REAL :: Tleaf, Ambvap, LatHv, GH, StomRes, TranspireType, LeafRes, Vapdeficit, LeafLE, LE !SvdTk,
@@ -1158,7 +1085,6 @@ FUNCTION LeafLE(Tleaf, Ambvap, LatHv, GH, StomRes, TranspireType)
 END FUNCTION  LeafLE
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Boundary layer conductance
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION LeafBLC(GHforced, Tdelta, Llength)
       IMPLICIT NONE
       REAL :: GHforced, Tdelta, Llength, Ghfree, LeafBLC
@@ -1177,7 +1103,6 @@ END FUNCTION LeafBLC
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Convective energy term in Energy balance (W m-2 heat flux 
 !      from both sides of leaf)
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 FUNCTION LeafH(Tdelta, GH)
       IMPLICIT NONE
       REAL :: Tdelta, GH, LeafH
@@ -1185,7 +1110,6 @@ FUNCTION LeafH(Tdelta, GH)
 END FUNCTION LeafH
 !ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 !   Saturation vapor density  (kg/m3)
-!ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
 function SvdTk(Tk)
       IMPLICIT NONE
       REAL :: Tk, Svp, SvdTk

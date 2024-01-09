@@ -11,8 +11,7 @@ program main
    
    implicit none
 
-  !tables to map megan species to chemical mechanism species
-
+   !tables to map megan species to chemical mechanism species
    INCLUDE 'tables/SPC_NOCONVER.EXT'
    INCLUDE 'tables/SPC_CB05.EXT'
    INCLUDE 'tables/SPC_CB6.EXT'
@@ -31,19 +30,22 @@ program main
 
    type grid_type
        integer  :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
+       real     :: dx,dy     
    end type grid_type
-
    type(grid_type) :: grid
 
+   integer :: iostat
+   integer :: t,i !,j,k
+   integer :: ncid,var_id
+   
    !namelist variables:
-   integer           :: iostat
-   integer           :: ncid,var_id
    character(len=19) :: start_date, end_date
    character(len=16) :: mechanism='CBM05' !'CBM6' 'CB6A7', 'RACM2','CRACM', 'SAPRC' 'NOCON'
    logical           :: prep_megan=.false.
    character(250)    :: griddesc_file,gridname,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file
    character(250)    :: met_files(24)=""
    character(4)      :: lsm
+
    !date vars:
    integer      :: end_date_s,current_date_s,n_hours
    character(4) :: YYYY
@@ -51,20 +53,20 @@ program main
    character(2) :: MM,DD,HH,current_day="99",current_month="99"
    
    !input variables:
-   character(19), allocatable, dimension(:) :: times                         !(t)     from wrfout
-   real,    allocatable, dimension(:,:)     :: lon,lat                       !(x,y)   from wrfout
-   real,    allocatable, dimension(:,:)     :: tmp,ppfd,u10,v10,pre,hum,rain !(x,y,t) from wrfout
-   real,    allocatable, dimension(:,:)     :: smois,stemp                   !(x,y,t) from wrfout
-   integer, allocatable, dimension(:,:)     :: stype                         !(x,y)   from wrfout
-   integer, allocatable, dimension(:,:)     :: arid,non_arid,landtype        !(x,y)   from prep_megan
-   real,    allocatable, dimension(:,:,:)   :: ctf,ef,ldf_in                 !(x,y,*) from prep_megan
+   character(19), allocatable, dimension(:) :: times                         !(t)     <- from wrfout
+   real,    allocatable, dimension(:,:)     :: lon,lat,mapfac                !(x,y)   <- from wrfout
+   real,    allocatable, dimension(:,:)     :: tmp,ppfd,u10,v10,pre,hum,rain !(x,y,t) <- from wrfout
+   real,    allocatable, dimension(:,:)     :: smois,stemp                   !(x,y,t) <- from wrfout
+   integer, allocatable, dimension(:,:)     :: stype                         !(x,y)   <- from wrfout
+   integer, allocatable, dimension(:,:)     :: arid,non_arid,landtype        !(x,y)   <- from prep_megan
+   real,    allocatable, dimension(:,:,:)   :: ctf,ef,ldf_in                 !(x,y,*) <- from prep_megan
    !real,    allocatable, dimension(:,:)    :: needl,tropi,broad,shrub,grass,crop
    real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) from prep_megan
 
-   character(250)    :: met_file
-   integer           :: n_files, head
    !intermediate vars:
-   integer :: t,i!,j,k
+   character(250)    :: met_file
+   integer           :: n_met_files, head
+   
    integer, parameter :: layers=5
    real,    allocatable, dimension(:,:)     :: wind                           !(x,y,t) from wrfout
    real,    allocatable, dimension(:,:)     :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
@@ -72,7 +74,7 @@ program main
    !output vars:
    real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all      !(x,y,nclass,t)
 
-   !---
+   !---read namelist variables and parameters
    namelist/megan_nl/start_date,end_date,met_files,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file,mechanism,griddesc_file,gridname,lsm
    read(*,nml=megan_nl, iostat=iostat)
    if( iostat /= 0 ) then
@@ -84,8 +86,7 @@ program main
    print '("Archivos meteorologicos.. ")'
    do i=1,size(met_files)
       if (met_files(i) =="") then
-         n_files=i-1;
-         exit
+         n_met_files=i-1; exit
       else 
            print*,met_files(i)
       endif
@@ -96,8 +97,7 @@ program main
    !---
    print '("Preparo mecanísmo y especies.. ")'
    call select_megan_mechanism(mechanism)
-   print*,"  Mecanísmo: ",mechanism
-   print*,"  Especies: ",size(megan_names)
+   print*,"  Mecanísmo: ",mechanism,".  Especies: ",size(megan_names)
 
    !---
    print '("Read meteo params and coordinates.. ")'
@@ -150,8 +150,8 @@ program main
 
      print*,"MEGAN VOC"
      call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),     & !MEGAN VOCs model
-             grid%nx,grid%ny,layers,                   &  !dimensions
-             lat,lon,                                  &
+             grid%nx,grid%ny,layers,                   & !dimensions
+             lat,lon,                                  & !latitude, longitude
              tmp,ppfd,wind,pre,hum,                    & !INPs: 
              lai, lai,                                 &  !LAI (past), LAI (current),
              ctf, ef, ldf_in,                          &  !CTF, EF, LDF
@@ -165,14 +165,13 @@ program main
      !if ( bdnsp_soil_model ) then
      !    call bdsnp_nox()
      !else
-     
-     call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),  &
-              grid%nx,grid%ny,                      &
-              lat,                                  &
-              tmp,rain,                             &
-              lsm,stype,stemp,smois,                &
-              ctf, lai,                             &
-              out_buffer(:,:,i_NO,atoi(HH))         )
+     call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),  & !date
+              grid%nx,grid%ny,                      & !dims: (ncols nrows)
+              lat,                                  & !latitude
+              tmp,rain,                             & !temperature [ºK], precipitation rate [mm]
+              lsm,stype,stemp,smois,                & !land-surface-model, soil_type_clasification, soil temperature [ºK], soil mositure [m3/m3]
+              ctf, lai,                             & !canopy type fraction, leaf-area-index 
+              out_buffer(:,:,i_NO,atoi(HH))         ) ! 
      !endif
 
      !laip=laic
@@ -186,6 +185,12 @@ program main
    print '("Fin. ")'
 contains
 
+subroutine check(status)            !netcdf error-check function
+  integer, intent(in) :: status
+  if (status /= nf90_noerr) then
+    write(*,*) nf90_strerror(status); stop 'netcdf error'
+  end if
+end subroutine check
 
 function date(date_str, fmt_str) result(output) !Interfaz a "date"
   implicit none
@@ -193,11 +198,11 @@ function date(date_str, fmt_str) result(output) !Interfaz a "date"
   character(*), intent(in) :: date_str, fmt_str
   character(256)           :: command
   character(20)            :: output
-  command="date -d '"//trim(date_str)//"' '+"//trim(fmt_str)//"'  > tmp_date_jodemequeteneselmismonombre.txt"
+  command="date -d '"//trim(date_str)//"' '+"//trim(fmt_str)//"'  > tmp_datejodemequeteneselmismonombrequeyo.txt"
   call system( trim(command) )
   !print*,trim(command)
-  open(9, file='tmp_date_jodemequeteneselmismonombre.txt', status='old',action='read'); read(9, '(A)', iostat=iostat) output;  close(9)
-  call system('rm tmp_date_jodemequeteneselmismonombre.txt')
+  open(9, file='tmp_datejodemequeteneselmismonombrequeyo.txt', status='old',action='read'); read(9, '(A)', iostat=iostat) output;  close(9)
+  call system('rm tmp_datejodemequeteneselmismonombrequeyo.txt')
 end function
 
 function atoi(str)     !string -> int
@@ -257,6 +262,9 @@ subroutine get_meteofile_info(meteo_file,g,lat,lon,times)
   
       g%nx=g%nx-2;g%ny=g%ny-2 !esto hay que arreglarlo! (supongo que elimina los bordes)
      
+      call check (nf90_get_att(ncid, nf90_global, "DX", g%dx) )
+      call check (nf90_get_att(ncid, nf90_global, "DY", g%dy) )
+
       !lat lon coordinates
       if (.not. allocated(lat)  ) allocate( lat(g%nx,g%ny))
       if (.not. allocated(lon)  ) allocate( lon(g%nx,g%ny))
@@ -339,10 +347,11 @@ subroutine prep_static_data(g)
   call check(nf90_close(ncid))
 
   !From meteo:
-  if (.not. allocated(stype)) then; allocate( stype(g%nx,g%ny));endif
+  if (.not. allocated(stype))   allocate(  stype(g%nx,g%ny))
+  if (.not. allocated(mapfac))  allocate( mapfac(g%nx,g%ny))
   call check(nf90_open(trim(met_file), nf90_write, ncid ))
-      call check(nf90_inq_varid(ncid,'ISLTYP', var_id));
-      call check(  nf90_get_var(ncid, var_id, stype, [1,1,1], [g%nx,g%ny,1]  ))
+      call check(nf90_inq_varid(ncid,'ISLTYP'  , var_id)); call check(nf90_get_var(ncid, var_id,  stype, [1,1,1], [g%nx,g%ny,1]  ))
+      call check(nf90_inq_varid(ncid,'MAPFAC_M', var_id)); call check(nf90_get_var(ncid, var_id, MAPFAC, [1,1,1], [g%nx,g%ny,1]  ))
   call check(nf90_close(ncid))
 end subroutine
 
@@ -568,6 +577,8 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
           emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s))
        endif
      enddo ! End species loop
+
+
     !-----------------------------------------------------------------------
 end subroutine mgn2mech
 
@@ -581,7 +592,7 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
   integer             :: ncid,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
   integer             :: k!,i,j
   character(len=25)   :: out_file
-  
+                        
   !Creo NetCDF file
    out_file="out_"//YYYY//"_"//DDD//"_"//trim(MECHANISM)//".nc"
    print*,"ESCRIBIENDO: ",out_file
@@ -607,115 +618,107 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
    call check(nf90_open(trim(out_file), nf90_write, ncid       ))
      do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
        print*,"   Especie:",trim(mech_spc(k))
-       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer_all(:,:,k,:) ))
+       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer_all(:,:,k,:) )) !area/mapfactor_squared = (g%dx*g%dy)/(mapfac*mapfac)
      enddo
    call check(nf90_close( ncid ))
 end subroutine write_output_file
-!0000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 
-subroutine check(status)
-  integer, intent(in) :: status
-  if (status /= nf90_noerr) then
-    write(*,*) nf90_strerror(status)
-    stop 'netcdf error'
-  end if
-end subroutine check
-
-
-!DEBUG:
-subroutine write_diagnostic_file(g) !write input and intermediate data so i can check everything is allright
-  implicit none
-  type(grid_type) , intent(in) :: g
-  character(len=20) :: diag_file
-  integer           :: ncid,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
-  integer           :: k!,i,j
-  character(len=5),dimension(23) :: var_names, var_types, var_dimen
-
-  diag_file="diag_"//YYYY//"_"//DDD//"_"//HH//".nc"
-
-  print*,'   Escrbibiendo diag_file: ',diag_file
-
-  data var_names( 1),var_types( 1),var_dimen( 1) / 'LAT  ', 'FLOAT', 'XY   '/
-  data var_names( 2),var_types( 2),var_dimen( 2) / 'LON  ', 'FLOAT', 'XY   '/
-  data var_names( 3),var_types( 3),var_dimen( 3) / 'LAI  ', 'FLOAT', 'XY   '/
-  data var_names( 4),var_types( 4),var_dimen( 4) / 'NDEP ', 'FLOAT', 'XY   '/
-  data var_names( 5),var_types( 5),var_dimen( 5) / 'FERT ', 'FLOAT', 'XY   '/
-  data var_names( 6),var_types( 6),var_dimen( 6) / 'ARID ', 'INT  ', 'XY   '/
-  data var_names( 7),var_types( 7),var_dimen( 7) / 'NARID', 'INT  ', 'XY   '/
-  data var_names( 8),var_types( 8),var_dimen( 8) / 'LTYPE', 'INT  ', 'XY   '/
-  data var_names( 9),var_types( 9),var_dimen( 9) / 'U10  ', 'FLOAT', 'XY   '/
-  data var_names(10),var_types(10),var_dimen(10) / 'V10  ', 'FLOAT', 'XY   '/
-  data var_names(11),var_types(11),var_dimen(11) / 'PRE  ', 'FLOAT', 'XY   '/
-  data var_names(12),var_types(12),var_dimen(12) / 'TMP  ', 'FLOAT', 'XY   '/
-  data var_names(13),var_types(13),var_dimen(13) / 'PPFD ', 'FLOAT', 'XY   '/
-  data var_names(14),var_types(14),var_dimen(14) / 'HUM  ', 'FLOAT', 'XY   '/
-  data var_names(15),var_types(15),var_dimen(15) / 'RAIN' , 'FLOAT', 'XY   '/
-  data var_names(16),var_types(16),var_dimen(16) / 'STEMP', 'FLOAT', 'XY   '/
-  data var_names(17),var_types(17),var_dimen(17) / 'SMOIS', 'FLOAT', 'XY   '/
-  data var_names(18),var_types(18),var_dimen(18) / 'STYPE', 'INT  ', 'XY   '/
-  data var_names(19),var_types(19),var_dimen(19) / 'T_MIN', 'FLOAT', 'XY   '/
-  data var_names(20),var_types(20),var_dimen(20) / 'T_MAX', 'FLOAT', 'XY   '/
-  data var_names(21),var_types(21),var_dimen(21) / 'W_MAX', 'FLOAT', 'XY   '/
-  data var_names(22),var_types(22),var_dimen(22) / 'T_AVG', 'FLOAT', 'XY   '/
-  data var_names(23),var_types(23),var_dimen(23) / 'R_AVG', 'FLOAT', 'XY   '/
-  !data var_names( 3),var_types( 3),var_dimen( 3) / 'EF   ', 'FLOAT', 'XY   '/
-  !data var_names( 4),var_types( 4),var_dimen( 4) / 'LDF  ', 'FLOAT', 'XY   '/
-  !data var_names( 4),var_types( 4),var_dimen( 4) / 'CTS  ', 'FLOAT', 'XY   '/
-
-  call check(nf90_create(trim(diag_file), NF90_CLOBBER, ncid))
-    !Defino dimensiones
-    call check(nf90_def_dim(ncid, "Time", 1      , t_dim_id       ))
-    call check(nf90_def_dim(ncid, "x"   , g%nx   , x_dim_id       ))
-    call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
-    !call check(nf90_def_dim(ncid, "z"   , layers , z_dim_id       ))
-    !call check(nf90_def_dim(ncid, "c"   , nclass , s_dim_id       ))
-    !Defino variables
-    call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
-    call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
-    call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
-    !Creo variables:
-    do k=1, size(var_names)
-      if ( trim(var_types(k)) == "FLOAT" ) then
-         if ( trim(var_dimen(k)) == 'XY' .or. trim(var_dimen(k)) == 'XYT') then
-              call check( nf90_def_var(ncid, trim(var_names(k)) , NF90_FLOAT, [x_dim_id,y_dim_id], var_id)          )
-         endif
-      else if ( trim(var_types(k)) == "INT") then   
-              if ( trim(var_dimen(k)) == 'XY' .or. trim(var_dimen(k)) == 'XYT'  ) then
-              call check( nf90_def_var(ncid, trim(var_names(k)) , NF90_INT  , [x_dim_id,y_dim_id], var_id)          )
-         endif
-       endif
-    end do
-  call check(nf90_enddef(ncid))   !End NetCDF define mode
-
-  call check(nf90_open(trim(diag_file), nf90_write, ncid ))
-      call check(nf90_inq_varid(ncid,'LAT'  ,var_id )); call check(nf90_put_var(ncid, var_id, lat     ))    !print*, " LAT'    ";
-      call check(nf90_inq_varid(ncid,'LON'  ,var_id )); call check(nf90_put_var(ncid, var_id, lon     ))    !print*, " LON'    ";
-      !call check(nf90_inq_varid(ncid,'EF'   ,var_id )); call check(nf90_put_var(ncid, var_id, ef      ))   !print*, " EF'     ";
-      !call check(nf90_inq_varid(ncid,'LDF'  ,var_id )); call check(nf90_put_var(ncid, var_id, ldf_in  ))   !print*, " LDF'    ";
-      !call check(nf90_inq_varid(ncid,'CTS'  ,var_id )); call check(nf90_put_var(ncid, var_id, CTS     ))   !print*, " CTS'    ";
-      call check(nf90_inq_varid(ncid,'LAI'  ,var_id )); call check(nf90_put_var(ncid, var_id, lai     ))    !print*, " LAI'    ";
-      call check(nf90_inq_varid(ncid,'NDEP' ,var_id )); call check(nf90_put_var(ncid, var_id, ndep    ))    !print*, " NDEP'   ";
-      call check(nf90_inq_varid(ncid,'FERT' ,var_id )); call check(nf90_put_var(ncid, var_id, fert    ))    !print*, " FERT'   ";
-      call check(nf90_inq_varid(ncid,'ARID' ,var_id )); call check(nf90_put_var(ncid, var_id, arid    ))    !print*, " ARID'   ";
-      call check(nf90_inq_varid(ncid,'NARID',var_id )); call check(nf90_put_var(ncid, var_id, non_arid))    !print*, " NARID'  ";
-      call check(nf90_inq_varid(ncid,'LTYPE',var_id )); call check(nf90_put_var(ncid, var_id, landtype))    !print*, " LTYPE'  ";
-      call check(nf90_inq_varid(ncid,'U10'  ,var_id )); call check(nf90_put_var(ncid, var_id, u10     ))    !print*, " U10'    ";
-      call check(nf90_inq_varid(ncid,'V10'  ,var_id )); call check(nf90_put_var(ncid, var_id, v10     ))    !print*, " V10'    ";
-      call check(nf90_inq_varid(ncid,'PRE'  ,var_id )); call check(nf90_put_var(ncid, var_id, pre     ))    !print*, " PRE'    ";
-      call check(nf90_inq_varid(ncid,'TMP'  ,var_id )); call check(nf90_put_var(ncid, var_id, tmp     ))    !print*, " TMP'    ";
-      call check(nf90_inq_varid(ncid,'PPFD' ,var_id )); call check(nf90_put_var(ncid, var_id, ppfd    ))    !print*, " PPFD'   ";
-      call check(nf90_inq_varid(ncid,'HUM'  ,var_id )); call check(nf90_put_var(ncid, var_id, hum     ))    !print*, " HUM'    ";
-      call check(nf90_inq_varid(ncid,'STEMP',var_id )); call check(nf90_put_var(ncid, var_id, stemp   ))    !print*, " STEMP'  ";
-      call check(nf90_inq_varid(ncid,'SMOIS',var_id )); call check(nf90_put_var(ncid, var_id, smois   ))    !print*, " SMOIS'  ";
-      call check(nf90_inq_varid(ncid,'STYPE',var_id )); call check(nf90_put_var(ncid, var_id, stype   ))    !print*, " STYPE'  ";
-      call check(nf90_inq_varid(ncid,'T_MIN',var_id )); call check(nf90_put_var(ncid, var_id, tmp_min ))    !print*, " T_MIN'  ";
-      call check(nf90_inq_varid(ncid,'T_MAX',var_id )); call check(nf90_put_var(ncid, var_id, tmp_max ))    !print*, " T_MAX'  ";
-      call check(nf90_inq_varid(ncid,'T_AVG',var_id )); call check(nf90_put_var(ncid, var_id, tmp_avg ))    !print*, " T_AVG'  ";
-      call check(nf90_inq_varid(ncid,'W_MAX',var_id )); call check(nf90_put_var(ncid, var_id,wind_max ))    !print*, " W_MAX'  ";
-      call check(nf90_inq_varid(ncid,'R_AVG',var_id )); call check(nf90_put_var(ncid, var_id, ppfd_avg ))   !print*, " R_AVG'  ";
-      call check(nf90_inq_varid(ncid,'RAIN' ,var_id )); call check(nf90_put_var(ncid, var_id, rain    ))    !print*, " RAIN'   ";
-  call check(nf90_close( ncid ))
-end subroutine
+!@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+!@! DEBUG: the code below is just for debugin purposes:
+!@subroutine write_diagnostic_file(g) !write input and intermediate data so i can check everything is allright
+!@  implicit none
+!@  type(grid_type) , intent(in) :: g
+!@  character(len=20) :: diag_file
+!@  integer           :: ncid,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
+!@  integer           :: k!,i,j
+!@  character(len=5),dimension(23) :: var_names, var_types, var_dimen
+!@
+!@  diag_file="diag_"//YYYY//"_"//DDD//"_"//HH//".nc"
+!@
+!@  print*,'   Escrbibiendo diag_file: ',diag_file
+!@
+!@  data var_names( 1),var_types( 1),var_dimen( 1) / 'LAT  ', 'FLOAT', 'XY   '/
+!@  data var_names( 2),var_types( 2),var_dimen( 2) / 'LON  ', 'FLOAT', 'XY   '/
+!@  data var_names( 3),var_types( 3),var_dimen( 3) / 'LAI  ', 'FLOAT', 'XY   '/
+!@  data var_names( 4),var_types( 4),var_dimen( 4) / 'NDEP ', 'FLOAT', 'XY   '/
+!@  data var_names( 5),var_types( 5),var_dimen( 5) / 'FERT ', 'FLOAT', 'XY   '/
+!@  data var_names( 6),var_types( 6),var_dimen( 6) / 'ARID ', 'INT  ', 'XY   '/
+!@  data var_names( 7),var_types( 7),var_dimen( 7) / 'NARID', 'INT  ', 'XY   '/
+!@  data var_names( 8),var_types( 8),var_dimen( 8) / 'LTYPE', 'INT  ', 'XY   '/
+!@  data var_names( 9),var_types( 9),var_dimen( 9) / 'U10  ', 'FLOAT', 'XY   '/
+!@  data var_names(10),var_types(10),var_dimen(10) / 'V10  ', 'FLOAT', 'XY   '/
+!@  data var_names(11),var_types(11),var_dimen(11) / 'PRE  ', 'FLOAT', 'XY   '/
+!@  data var_names(12),var_types(12),var_dimen(12) / 'TMP  ', 'FLOAT', 'XY   '/
+!@  data var_names(13),var_types(13),var_dimen(13) / 'PPFD ', 'FLOAT', 'XY   '/
+!@  data var_names(14),var_types(14),var_dimen(14) / 'HUM  ', 'FLOAT', 'XY   '/
+!@  data var_names(15),var_types(15),var_dimen(15) / 'RAIN' , 'FLOAT', 'XY   '/
+!@  data var_names(16),var_types(16),var_dimen(16) / 'STEMP', 'FLOAT', 'XY   '/
+!@  data var_names(17),var_types(17),var_dimen(17) / 'SMOIS', 'FLOAT', 'XY   '/
+!@  data var_names(18),var_types(18),var_dimen(18) / 'STYPE', 'INT  ', 'XY   '/
+!@  data var_names(19),var_types(19),var_dimen(19) / 'T_MIN', 'FLOAT', 'XY   '/
+!@  data var_names(20),var_types(20),var_dimen(20) / 'T_MAX', 'FLOAT', 'XY   '/
+!@  data var_names(21),var_types(21),var_dimen(21) / 'W_MAX', 'FLOAT', 'XY   '/
+!@  data var_names(22),var_types(22),var_dimen(22) / 'T_AVG', 'FLOAT', 'XY   '/
+!@  data var_names(23),var_types(23),var_dimen(23) / 'R_AVG', 'FLOAT', 'XY   '/
+!@  !data var_names( 3),var_types( 3),var_dimen( 3) / 'EF   ', 'FLOAT', 'XY   '/
+!@  !data var_names( 4),var_types( 4),var_dimen( 4) / 'LDF  ', 'FLOAT', 'XY   '/
+!@  !data var_names( 4),var_types( 4),var_dimen( 4) / 'CTS  ', 'FLOAT', 'XY   '/
+!@
+!@  call check(nf90_create(trim(diag_file), NF90_CLOBBER, ncid))
+!@    !Defino dimensiones
+!@    call check(nf90_def_dim(ncid, "Time", 1      , t_dim_id       ))
+!@    call check(nf90_def_dim(ncid, "x"   , g%nx   , x_dim_id       ))
+!@    call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
+!@    !call check(nf90_def_dim(ncid, "z"   , layers , z_dim_id       ))
+!@    !call check(nf90_def_dim(ncid, "c"   , nclass , s_dim_id       ))
+!@    !Defino variables
+!@    call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
+!@    call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
+!@    call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
+!@    !Creo variables:
+!@    do k=1, size(var_names)
+!@      if ( trim(var_types(k)) == "FLOAT" ) then
+!@         if ( trim(var_dimen(k)) == 'XY' .or. trim(var_dimen(k)) == 'XYT') then
+!@              call check( nf90_def_var(ncid, trim(var_names(k)) , NF90_FLOAT, [x_dim_id,y_dim_id], var_id)          )
+!@         endif
+!@      else if ( trim(var_types(k)) == "INT") then   
+!@              if ( trim(var_dimen(k)) == 'XY' .or. trim(var_dimen(k)) == 'XYT'  ) then
+!@              call check( nf90_def_var(ncid, trim(var_names(k)) , NF90_INT  , [x_dim_id,y_dim_id], var_id)          )
+!@         endif
+!@       endif
+!@    end do
+!@  call check(nf90_enddef(ncid))   !End NetCDF define mode
+!@
+!@  call check(nf90_open(trim(diag_file), nf90_write, ncid ))
+!@      call check(nf90_inq_varid(ncid,'LAT'  ,var_id )); call check(nf90_put_var(ncid, var_id, lat     ))    !print*, " LAT'    ";
+!@      call check(nf90_inq_varid(ncid,'LON'  ,var_id )); call check(nf90_put_var(ncid, var_id, lon     ))    !print*, " LON'    ";
+!@      !call check(nf90_inq_varid(ncid,'EF'   ,var_id )); call check(nf90_put_var(ncid, var_id, ef      ))   !print*, " EF'     ";
+!@      !call check(nf90_inq_varid(ncid,'LDF'  ,var_id )); call check(nf90_put_var(ncid, var_id, ldf_in  ))   !print*, " LDF'    ";
+!@      !call check(nf90_inq_varid(ncid,'CTS'  ,var_id )); call check(nf90_put_var(ncid, var_id, CTS     ))   !print*, " CTS'    ";
+!@      call check(nf90_inq_varid(ncid,'LAI'  ,var_id )); call check(nf90_put_var(ncid, var_id, lai     ))    !print*, " LAI'    ";
+!@      call check(nf90_inq_varid(ncid,'NDEP' ,var_id )); call check(nf90_put_var(ncid, var_id, ndep    ))    !print*, " NDEP'   ";
+!@      call check(nf90_inq_varid(ncid,'FERT' ,var_id )); call check(nf90_put_var(ncid, var_id, fert    ))    !print*, " FERT'   ";
+!@      call check(nf90_inq_varid(ncid,'ARID' ,var_id )); call check(nf90_put_var(ncid, var_id, arid    ))    !print*, " ARID'   ";
+!@      call check(nf90_inq_varid(ncid,'NARID',var_id )); call check(nf90_put_var(ncid, var_id, non_arid))    !print*, " NARID'  ";
+!@      call check(nf90_inq_varid(ncid,'LTYPE',var_id )); call check(nf90_put_var(ncid, var_id, landtype))    !print*, " LTYPE'  ";
+!@      call check(nf90_inq_varid(ncid,'U10'  ,var_id )); call check(nf90_put_var(ncid, var_id, u10     ))    !print*, " U10'    ";
+!@      call check(nf90_inq_varid(ncid,'V10'  ,var_id )); call check(nf90_put_var(ncid, var_id, v10     ))    !print*, " V10'    ";
+!@      call check(nf90_inq_varid(ncid,'PRE'  ,var_id )); call check(nf90_put_var(ncid, var_id, pre     ))    !print*, " PRE'    ";
+!@      call check(nf90_inq_varid(ncid,'TMP'  ,var_id )); call check(nf90_put_var(ncid, var_id, tmp     ))    !print*, " TMP'    ";
+!@      call check(nf90_inq_varid(ncid,'PPFD' ,var_id )); call check(nf90_put_var(ncid, var_id, ppfd    ))    !print*, " PPFD'   ";
+!@      call check(nf90_inq_varid(ncid,'HUM'  ,var_id )); call check(nf90_put_var(ncid, var_id, hum     ))    !print*, " HUM'    ";
+!@      call check(nf90_inq_varid(ncid,'STEMP',var_id )); call check(nf90_put_var(ncid, var_id, stemp   ))    !print*, " STEMP'  ";
+!@      call check(nf90_inq_varid(ncid,'SMOIS',var_id )); call check(nf90_put_var(ncid, var_id, smois   ))    !print*, " SMOIS'  ";
+!@      call check(nf90_inq_varid(ncid,'STYPE',var_id )); call check(nf90_put_var(ncid, var_id, stype   ))    !print*, " STYPE'  ";
+!@      call check(nf90_inq_varid(ncid,'T_MIN',var_id )); call check(nf90_put_var(ncid, var_id, tmp_min ))    !print*, " T_MIN'  ";
+!@      call check(nf90_inq_varid(ncid,'T_MAX',var_id )); call check(nf90_put_var(ncid, var_id, tmp_max ))    !print*, " T_MAX'  ";
+!@      call check(nf90_inq_varid(ncid,'T_AVG',var_id )); call check(nf90_put_var(ncid, var_id, tmp_avg ))    !print*, " T_AVG'  ";
+!@      call check(nf90_inq_varid(ncid,'W_MAX',var_id )); call check(nf90_put_var(ncid, var_id,wind_max ))    !print*, " W_MAX'  ";
+!@      call check(nf90_inq_varid(ncid,'R_AVG',var_id )); call check(nf90_put_var(ncid, var_id, ppfd_avg ))   !print*, " R_AVG'  ";
+!@      call check(nf90_inq_varid(ncid,'RAIN' ,var_id )); call check(nf90_put_var(ncid, var_id, rain    ))    !print*, " RAIN'   ";
+!@  call check(nf90_close( ncid ))
+!@end subroutine
+!@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 
 end program main

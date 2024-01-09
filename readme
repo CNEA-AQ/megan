@@ -1,2 +1,71 @@
-# MEGAN
+# MEGAN Emission Model
+
+> `megan` is a fortran program that estimates biogenic VOCs emissions, developed by Alex Guenther and its group.
+
+## Dependencies:
+ +  Fortran GNU compiler
+ +  NetCDF library
+
+## Get MEGAN input data:
+
+In order to run megan you will need a meteorological file and some land data. 
+
+Data required:
++ Meteorological fields: temp, wind, presure, humidity, soil moisture, soil type, LAI (optional).
++ Land and vegetation fields: LAI, EF, LDF, CT
++ For NO calculation you will also need: LAND, Arid/Non-Arid, Fert, NO production.
+
+## Build
+Go to the ``src`` directory:
+
+`> cd src/`
+
+Edit the Makefile to set the compiler and path to NetCDF lib and include files. Check your `nc-config --libdir` and `nc-config --includedir`.
+
+`> make`
+
+If the compilation is successful, the executable `meganv3.2.exe` should be created.
+
+## Run
+
+Edit the namelist `namelist_megan` that contains the following variables:
+
+```fortran
+&megan_nl
+   start_date='2022-10-19 19:00:00',  !YYYY-MM-DD_HH:MM:SS
+   end_date  ='2022-10-20 02:00:00',  !YYYY-MM-DD_HH:MM:SS
+
+   griddesc_file='GRIDDESC',
+   gridname='Argentina',
+   met_files='wrfout_test',           !'wrfout_d01_2022-10-19_18:00:00',!
+   LSM='NOAH',                        ! Land Surface Model (LSM) used in meteo
+
+   ctf_file= 'CT3.nc',
+   lai_file= 'LAI3.nc',
+   ef_file=  'EF.nc',
+   ldf_file= 'LDF.nc',
+   ndep_file='NDEP.nc',
+   fert_file='FERT.nc',
+   land_file='LAND.nc',
+
+   mechanism='CB6', !'RACM2', !'CB05', ! 'B6_ae7', !'CRACMM'  ! 'SAPRC07', !
+/
+```
+
+Note that the variables must be adjusted to match the appropriate values for your system.
+
+Then execute `megan_v3.2.exe`:
+
+`> ./megan_v3.2.exe < namelist_megan` 
+
+Please feel free to contact the developer if you have any issues or suggestions.
+
+## Planned future improvements:
+
+ + [x] Reduce number input files and output files. 
+   - [x] Group LAI files into one.
+   - [x] Group GT frac files into one.
+   - [x] Group Fert files and Nitro files.
+   - [x] Group landtype files by using int as id. 
+ + [x] Input and output files and variables with minningfull names.
 
