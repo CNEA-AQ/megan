@@ -1,14 +1,15 @@
-MODULE MEGAN_V32
+module voc_mod
 use netcdf
    implicit none
 
    !Version dependent parameters:
    integer, parameter :: NrTyp  = 6   !Number of "Canopy types": trees (needle,broad,tropical),shrub,grass,crop.
    integer, parameter :: NCLASS = 19  !MEGAN Internal Emission Categories
+   integer, parameter :: layers=5     !canopy layers
    !---
    integer, save :: nmgnspc           !number of megan     species
    integer, save :: n_scon_spc        !number of mechanism species
-   character( 16 ), allocatable :: megan_names(:)     ! megan species names
+   character( 16 ), allocatable :: megan_names(:)             ! megan species names
    integer,         allocatable ::  spmh_map(:),mech_map(:)   ! speciated species name
 
    real,            allocatable :: conv_fac(:)
@@ -20,10 +21,9 @@ use netcdf
 
 contains
 
-subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
-             ncols,nrows,layers,                           & !dimensions
-             lat,long,                                     & !lat,lon,canopy fractions
-             temp,rad,wind,pres,qv,                        & !meteo instant variables
+subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,hour
+             ncols,nrows,lat,long,                         & !dimensions, latitude, longitude coordinates
+             temp,rad,wind,pres,qv,                        & !air temperature [ºK], 
              laip, laic,                                   &
              ctf, efmaps, ldf_in,                          & !lai,emis factors, light emis factors
              lsm,soil_type,soil_moisture,                  & !land surface model, soil type, soil_moisture
@@ -33,7 +33,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
     implicit none
     ! input variables
     integer, intent(in)                           :: yyyy, ddd, hh           ! year, jday, hour
-    integer, intent(in)                           :: ncols, nrows, layers    !dims x,y,levels
+    integer, intent(in)                           :: ncols, nrows!, layers    !dims x,y
     real,    intent(in), dimension(ncols,nrows)   :: lat, long, temp, rad, wind, pres, qv, laip,laic
     real,    intent(in), dimension(ncols,nrows)   :: tmp_avg,rad_avg,tmp_min,tmp_max,wind_max
 
@@ -102,8 +102,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
 
     REAL :: VPGWT(LAYERS)
     REAL :: SUM1,SUM2,Ea1L,Ea2L
- 
-    !@!debug variables:
+    !@!!debug variables:
     !@!integer :: ierr,var_id,ncid,col_dim_id,row_dim_id,lvl_dim_id
     !@!  diagnostic variables:
     !@!real ::  wilt_map(ncols,nrows)
@@ -128,11 +127,9 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
               allocate(wwlt(size(wwlt_noah))); wwlt=wwlt_noah;
            case ('JN90' )
               !allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
-              !allocate(wwlt(size(WWLT_PX_WRFV3))); wwlt=WWLT_PX_WRFV3;
               allocate(wwlt(size(WWLT_PX_WRFV4P))); wwlt=WWLT_PX_WRFV4P;
            case DEFAULT
               allocate(wwlt(size(WWLT_PX_WRFV3))); wwlt=WWLT_PX_WRFV3;
-              !allocate(wwlt(size(wwlt_jn90))); wwlt=wwlt_jn90;
     end select
 
    do j = 1, NROWS
@@ -261,16 +258,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,jday,hour
             SUM1 = 0.0
             SUM2 = 0.0
             do k = 1, layers
-              
               Ea1L = CDEA(K) * GAMTLD(SunT(k),tmp_avg(i,j),S) * GAMP(SunP(k),rad_avg(i,j)) *        SunF(k)  + &! *2.025 is the conversion to PPFD. 
                                GAMTLD(ShaT(k),tmp_avg(i,j),S) * GAMP(ShaP(k),rad_avg(i,j)) * (1.0 - SunF(k) )   ! *2.025 is the conversion to PPFD. 
-              !Ea1L = CDEA(K) * GAMTLD(SunT(i,j,k),tmp_avg(i,j),S) * GAMP(SunP(i,j,k),rad_avg(i,j)) *        SunF(i,j,k)  + &!*        SunF(k)  + &
-              !                 GAMTLD(ShaT(i,j,k),tmp_avg(i,j),S) * GAMP(ShaP(i,j,k),rad_avg(i,j)) * (1.0 - SunF(i,j,k) )   !* (1.0 - SunF(k) )   
-
               SUM1 = SUM1 + Ea1L * VPGWT(K)
 
               Ea2L = GAMTLI(SunT(k),S) * SunF(k) + GAMTLI(ShaT(k),S) * (1.0-SunF(k))
-              !Ea2L = GAMTLI(SunT(i,j,k),S) * SunF(i,j,k) + GAMTLI(ShaT(i,j,k),S) * (1.0-SunF(i,j,k))
               SUM2 = SUM2 + Ea2L * VPGWT(K)
             end do ! end do canopy layers
 
@@ -422,11 +414,7 @@ contains
             GAMP= 0.0
         ELSE
             Alpha  = 0.004
-            !        C1     = 0.0468 * EXP(0.0005 * (PPFD24 - PSTD))
-            !     &          * (PPFD24 ** 0.6)
-            C1 = 1.03
-            !        GAMP= (Alpha * C1 * PPFD1) / ((1 + Alpha**2. * PPFD1**2.)**0.5)
-        !   use SQRT her for clarity and efficiency
+            C1 = 1.03 !C1 = 0.0468 * EXP(0.0005 * (PPFD24 - PSTD)) * (PPFD24 ** 0.6)
             GAMP= (Alpha * C1 * PPFD1) / SQRT(1.0 + Alpha**2 * PPFD1**2)
         ENDIF
     end function gamp
@@ -988,7 +976,7 @@ SUBROUTINE LeafEB(PPFD, Q, IRin, Eps, TranspireType,         &
         ENDIF
       ENDDO
 
-      If (Tdelt > 10)  Tdelt = 10
+      If (Tdelt >  10)  Tdelt = 10
       If (Tdelt < -10) Tdelt = -10
 
       Tleaf = TairK + Tdelt
@@ -1121,4 +1109,4 @@ end function  SvdTk
 
 end subroutine megan_voc
 
-END MODULE MEGAN_V32
+end module voc_mod

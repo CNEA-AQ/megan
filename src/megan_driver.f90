@@ -1,13 +1,13 @@
 program main
-   ! program:     MEGAN  v3.2
-   ! description: Biogenic VOCs emission model (by Alex Guenther)
-   ! coded by:    Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, among others.
+   ! program:     MEGAN v3.2
+   ! description: biogenic VOCs emission model (by Alex Guenther)
+   ! authors:     Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, among others.
    ! adapted by:  Ramiro Espada (date: 11/2023)
 
    use netcdf   
-   use megan_v32  !megan module: (megan_voc)
-   use nox_mod    !megan module: (megan_nox)
-   !use bdsnp      !megan module: (bdsnp_nox)
+   use voc_mod  !megan module: (megan_voc)
+   use nox_mod  !megan module: (megan_nox)
+   !use bdsnp   !megan module: (bdsnp_nox)
    
    implicit none
 
@@ -28,16 +28,15 @@ program main
    INCLUDE 'tables/MAP_CV2SAPRC07.EXT'
    INCLUDE 'tables/MAP_CV2SAPRC07T.EXT'
 
+   integer :: iostat
+   integer :: t,i !,j,k
+   
    type grid_type
        integer  :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
        real     :: dx,dy     
    end type grid_type
    type(grid_type) :: grid
 
-   integer :: iostat
-   integer :: t,i !,j,k
-   integer :: ncid,var_id
-   
    !namelist variables:
    character(len=19) :: start_date, end_date
    character(len=16) :: mechanism='CBM05' !'CBM6' 'CB6A7', 'RACM2','CRACM', 'SAPRC' 'NOCON'
@@ -46,7 +45,7 @@ program main
    character(250)    :: met_files(24)=""
    character(4)      :: lsm
 
-   !date vars:
+   !date-time vars:
    integer      :: end_date_s,current_date_s,n_hours
    character(4) :: YYYY
    character(3) :: DDD
@@ -64,12 +63,10 @@ program main
    real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) from prep_megan
 
    !intermediate vars:
-   character(250)    :: met_file
-   integer           :: n_met_files, head
-   
-   integer, parameter :: layers=5
-   real,    allocatable, dimension(:,:)     :: wind                           !(x,y,t) from wrfout
-   real,    allocatable, dimension(:,:)     :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
+   character(250)     :: met_file
+   integer            :: n_met_files, head
+   real, allocatable, dimension(:,:) :: wind                                      !(x,y,t) from wrfout
+   real, allocatable, dimension(:,:) :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
   
    !output vars:
    real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all      !(x,y,nclass,t)
@@ -148,30 +145,29 @@ program main
 
      !call write_diagnostic_file(grid)
 
-     print*,"MEGAN VOC"
-     call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),     & !MEGAN VOCs model
-             grid%nx,grid%ny,layers,                   & !dimensions
-             lat,lon,                                  & !latitude, longitude
-             tmp,ppfd,wind,pre,hum,                    & !INPs: 
-             lai, lai,                                 &  !LAI (past), LAI (current),
-             ctf, ef, ldf_in,                          &  !CTF, EF, LDF
-             lsm,stype,smois,                          &  !mesea Inps: land surface model, soil type, soil moisture!
-             tmp,tmp,wind,tmp,ppfd,                    &  !max temp, min temp, max wind, daily temp and daily ppfd
+     print*," > megan voc"
+     call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),    & !MEGAN VOCs model
+            grid%nx,grid%ny, lat,lon,                 & !dimensions (ncols,nrows), latitude, longitude
+            tmp,ppfd,wind,pre,hum,                    & !meteo 
+            lai, lai,                                 & !LAI (past), LAI (current),
+            ctf, ef, ldf_in,                          & !CTF, EF, LDF
+            lsm,stype,smois,                          & !land surface model, soil typ category, soil moisture!
+            tmp,tmp,wind,tmp,ppfd,                    & !max temp, min temp, max wind, daily temp and daily ppfd
             !tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,&  !max temp, min temp, max wind, daily temp and daily ppfd
-             out_buffer(:,:,:,atoi(HH))                )  !Emis array
+            out_buffer(:,:,:,atoi(HH))                ) !Emis array
 
-     print*,"MEGAN NOX"
+     print*," > megan nox"
      !soil NO model:
      !if ( bdnsp_soil_model ) then
      !    call bdsnp_nox()
      !else
      call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),  & !date
-              grid%nx,grid%ny,                      & !dims: (ncols nrows)
-              lat,                                  & !latitude
-              tmp,rain,                             & !temperature [ºK], precipitation rate [mm]
-              lsm,stype,stemp,smois,                & !land-surface-model, soil_type_clasification, soil temperature [ºK], soil mositure [m3/m3]
-              ctf, lai,                             & !canopy type fraction, leaf-area-index 
-              out_buffer(:,:,i_NO,atoi(HH))         ) ! 
+            grid%nx,grid%ny,                        & !dims: (ncols nrows)
+            lat,                                    & !latitude
+            tmp,rain,                               & !temperature [ºK], precipitation rate [mm]
+            lsm,stype,stemp,smois,                  & !land-surface-model, soil_type_clasification, soil temperature [ºK], soil mositure [m3/m3]
+            ctf, lai,                               & !canopy type fraction, leaf-area-index 
+            out_buffer(:,:,i_NO,atoi(HH))           ) !emision flux array [??/??]
      !endif
 
      !laip=laic
@@ -301,6 +297,7 @@ subroutine prep_static_data(g)
   implicit none
   type(grid_type) :: g
   integer         :: i,j,k
+  integer         :: ncid, var_id
 
   character(len=10),dimension(19) :: ef_vars=["EF_ISOP   ", "EF_MBO    ", "EF_MT_PINE", "EF_MT_ACYC", "EF_MT_CAMP", "EF_MT_SABI", "EF_MT_AROM", "EF_NO     ", "EF_SQT_HR ", "EF_SQT_LR ", "EF_MEOH   ", "EF_ACTO   ", "EF_ETOH   ", "EF_ACID   ", "EF_LVOC   ", "EF_OXPROD ", "EF_STRESS ", "EF_OTHER  ", "EF_CO     "]
   character(len=5),dimension(4)   :: ldf_vars=["LDF03","LDF04","LDF05","LDF06"]
@@ -359,7 +356,7 @@ subroutine get_hourly_data(g,t)
   implicit none
   type(grid_type) :: g
   integer,intent(in) :: t
-  integer :: ncid,time_dimid,time_len
+  integer :: ncid,var_id,time_dimid,time_len
   
   print*,"  Preparo inputs dinámicos horarios.."
   if (.not. allocated(tmp)  ) allocate(  tmp(g%nx,g%ny))
@@ -397,7 +394,7 @@ subroutine get_daily_data(g,DDD)
   implicit none
   type(grid_type), intent(in) :: g
   character(len=3),intent(in) :: DDD                      
-  integer :: ncid,time_dimid,time_len
+  integer :: ncid,var_id,time_dimid,time_len
   real, dimension(:,:,:), allocatable :: t,u,v,r,wnd
   
      print*,"Preparo inputs dinámicos diarios.."
@@ -443,7 +440,7 @@ subroutine get_monthly_data(g,MM)!,lai,ndep)
   implicit none
   type(grid_type)   :: g
   character(len=2)  :: MM
-
+  integer           :: ncid,var_id
   print*,"  Preparo inputs dinámicos mensuales.."
   if (.not. allocated(ndep)) then; allocate(ndep(g%nx,g%ny));endif
   !if (.not. allocated(lai) ) then; allocate( lai(g%nx,g%ny));endif
@@ -589,7 +586,7 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
   character(len=4), intent(in) :: YYYY
   character(len=3), intent(in) :: DDD
   !local vars
-  integer             :: ncid,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
+  integer             :: ncid,var_id,t_dim_id,x_dim_id,y_dim_id,z_dim_id,s_dim_id,var_dim_id
   integer             :: k!,i,j
   character(len=25)   :: out_file
                         

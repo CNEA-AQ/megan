@@ -1,17 +1,16 @@
 module nox_mod
-
-   !include bdsnp_mod
+   
    include 'tables/LSM.EXT'
 
 contains
 
-subroutine megan_nox(yyyy,ddd,hh,  &
-           ncols,nrows,            &
-           lat,                    &
-           tmp,rain,               &
-           lsm,styp,stemp,smois,   &
-           ctf, lai,               &
-           no_emis                 )
+subroutine megan_nox(yyyy,ddd,hh,  &  !date-time
+           ncols,nrows,            &  !dimensions
+           lat,                    &  !latitude
+           tmp,rain,               &  !air temperature [ºK], precipitation rate [mm]
+           lsm,styp,stemp,smois,   &  !land-surface-model, soil-type category, soil temperature [ºK], soil mositure [m3/m3]
+           ctf, lai,               &  !canopy type fraction, leaf area index
+           no_emis                 )  !nox emission [??/??]
 
   implicit none
   !input variables:
@@ -23,7 +22,7 @@ subroutine megan_nox(yyyy,ddd,hh,  &
   character(len=4), intent(in) :: lsm          !land surface model 
 
   !output variables:
-  real, intent(inout) :: NO_EMIS(ncols,nrows)
+  real, intent(inout) :: NO_EMIS(ncols,nrows)  ! NO emision flux [??/??]
 
   !local variables:
   real    :: CFNO, CFNOG                  !  NO correction factor !  NO correction factor (for grass)
@@ -31,10 +30,10 @@ subroutine megan_nox(yyyy,ddd,hh,  &
   real    :: TAIR,SMOI,TSOI,PREC_ADJ,LATI,LAIv
   integer :: ISTYP,MAXSTYPES
   real    :: CANF(6)
-  real, allocatable :: wsat(:)            ! ver como calcular !
   real    :: fac1,fac2,tmo1,tmo2,ratio
   integer :: gday,glen
   logical :: have_soil_fields=.true.
+  real, allocatable :: wsat(:)            ! ver como calcular !
 
   integer :: i,j,k,i_ct
   
@@ -120,10 +119,10 @@ subroutine megan_nox(yyyy,ddd,hh,  &
       
       call growseason(yyyy,ddd,LATI,gday,glen)
 
-       IF (GDAY .EQ. 0) THEN                          ! non growing season ! CFNOG for everywhere
+       IF (GDAY .EQ. 0) THEN                          ! non growing season ! CFNOG everywhere
           NO_EMIS(i,j) = CFNOG 
 
-       ELSE IF (GDAY .GT. 0 .AND. GDAY .LE. 366) THEN ! growing season     ! CFNOG for everywhere except crops
+       ELSE IF (GDAY .GT. 0 .AND. GDAY .LE. 366) THEN ! growing season     ! CFNOG everywhere except crops
           TMO1 = 0.0; TMO2 = 0.0
           DO I_CT=1,5
             TMO1 = TMO1 + CANF(i_ct)
@@ -145,8 +144,8 @@ subroutine megan_nox(yyyy,ddd,hh,  &
 
  contains
 
- real function fertlz_adj(gday, glen) !    Computes fertilizer adjustment factor based ond growdate      
-                                      !    If it is not growing season, the adjustment factor is 0; otherwise, it ranges from 0.0 to 1.0.
+ real function fertlz_adj(gday, glen) ! Computes fertilizer adjustment factor based ond growdate      
+                                      ! If it is not growing season, the adjustment factor is 0; otherwise, it ranges from 0.0 to 1.0.
     implicit none
     integer, intent(in) ::  gday, glen
  
@@ -220,55 +219,55 @@ subroutine growseason (year,jday,lat,gday,glen)!!MEJORAR ESTA FUNCIÓN!!
     RETURN
 end subroutine growseason
 
- REAL FUNCTION PRECIPFACT(RRATE)!, JDATE, JTIME, ADATE, ATIME )
- ! This internal function computes a precipitation adjustment
- ! factor from YL 1995 based on a rain rate. The pulse type is
- ! and integer ranging from 0 to 3 indicating the type of rainfall rate.
-   IMPLICIT NONE
-   REAL   , intent (in) :: rrate !rainfall rate
-   !...  Function arguments
-   INTEGER :: PULSETYPE
-   integer ::  HRDIFF = 1.0 !SECSDIFF( ADATE, ATIME, JDATE, JTIME ) / 3600.
-   !pulse type
-   IF( RRATE < 0.1 ) THEN
-       PULSETYPE = 0
-   ELSE IF( RRATE < 0.5 ) THEN
-       PULSETYPE = 1
-   ELSE IF( RRATE < 1.5 ) THEN
-       PULSETYPE = 2
-   ELSE
-       PULSETYPE = 3
-   ENDIF
+REAL FUNCTION PRECIPFACT(RRATE)!, JDATE, JTIME, ADATE, ATIME )
+! This internal function computes a precipitation adjustment
+! factor from YL 1995 based on a rain rate. The pulse type is
+! and integer ranging from 0 to 3 indicating the type of rainfall rate.
+  IMPLICIT NONE
+  REAL   , intent (in) :: rrate !rainfall rate
+  !...  Function arguments
+  INTEGER :: PULSETYPE
+  integer ::  HRDIFF = 1.0 !SECSDIFF( ADATE, ATIME, JDATE, JTIME ) / 3600.
+  !pulse type
+  IF( RRATE < 0.1 ) THEN
+      PULSETYPE = 0
+  ELSE IF( RRATE < 0.5 ) THEN
+      PULSETYPE = 1
+  ELSE IF( RRATE < 1.5 ) THEN
+      PULSETYPE = 2
+  ELSE
+      PULSETYPE = 3
+  ENDIF
 
-   SELECT CASE( PULSETYPE )
-   CASE( 0 )
-       PRECIPFACT = 1.
-   CASE( 1 )
-       IF( ( HRDIFF / 24. ) < 2. ) THEN
-           PRECIPFACT = 11.19 * EXP(-0.805*(HRDIFF+24)/24.)
-       ELSE
-           PULSETYPE = 0
-           PRECIPFACT = 1.
-       ENDIF
-   CASE( 2 )
-       IF( ( HRDIFF / 24. ) < 6. ) THEN
-           PRECIPFACT = 14.68 * EXP(-0.384*(HRDIFF+24)/24.)
-       ELSE
-           PULSETYPE = 0
-           PRECIPFACT = 1.
-       ENDIF
-   CASE DEFAULT
-       IF( ( HRDIFF / 24. ) < 13. ) THEN
-           PRECIPFACT = 18.46 * EXP(-0.208*(HRDIFF+24)/24.)
-       ELSE
-           PULSETYPE = 0
-           PRECIPFACT = 1.
-       ENDIF
-   END SELECT
+  SELECT CASE( PULSETYPE )
+  CASE( 0 )
+      PRECIPFACT = 1.
+  CASE( 1 )
+      IF( ( HRDIFF / 24. ) < 2. ) THEN
+          PRECIPFACT = 11.19 * EXP(-0.805*(HRDIFF+24)/24.)
+      ELSE
+          PULSETYPE = 0
+          PRECIPFACT = 1.
+      ENDIF
+  CASE( 2 )
+      IF( ( HRDIFF / 24. ) < 6. ) THEN
+          PRECIPFACT = 14.68 * EXP(-0.384*(HRDIFF+24)/24.)
+      ELSE
+          PULSETYPE = 0
+          PRECIPFACT = 1.
+      ENDIF
+  CASE DEFAULT
+      IF( ( HRDIFF / 24. ) < 13. ) THEN
+          PRECIPFACT = 18.46 * EXP(-0.208*(HRDIFF+24)/24.)
+      ELSE
+          PULSETYPE = 0
+          PRECIPFACT = 1.
+      ENDIF
+  END SELECT
 
-   RETURN
+  RETURN
 
- END FUNCTION PRECIPFACT
+END FUNCTION PRECIPFACT
 
 end subroutine megan_nox
 

@@ -549,8 +549,8 @@ SUBROUTINE GET_CANOPY_NOX(JDATE, JTIME, COSZEN, TASFC, SSOLAR, PRES, LANDTYPE, L
       REAL*8, PARAMETER :: XMWH2O = 18d-3
       !
       ! Ventilation velocity for NOx, day & night values [m/s]
-      REAL*8,  PARAMETER :: VFDAY   = 1.0d-2
-      REAL*8,  PARAMETER :: VFNIGHT = 0.2d-2 
+      REAL*8, PARAMETER :: VFDAY   = 1.0d-2
+      REAL*8, PARAMETER :: VFNIGHT = 0.2d-2 
       REAL*8, PARAMETER :: PRESS  = 1.5d5
 
       ! Set physical parameters
@@ -842,35 +842,35 @@ REAL*8 FUNCTION BIOFIT(COEFF1,XLAI1,SUNCOS1,CFRAC1)
 ! Calculate the light correction
 !===============================================
 !* BIOFIT and SUNPARAM were written by Y.H. Wang.   
-!*             !-------------------------------------------------------------
-            ! Adjust stomatal resistances for insolation and temperature:  
-            ! 
-            ! Temperature adjustment is from Wesely [1989], equation (3).
-            ! 
-            ! Light adjustment by the function BIOFIT is described by Wang 
-            ! [1996].  It combines:
-            !
-            ! - Local dependence of stomal resistance on the intensity I 
-            !   of light impinging the leaf; this is expressed as a 
-            !   multiplicative factor I/(I+b) to the stomatal resistance 
-            !   where b = 50 W m-2
-            !   (equation (7) of Baldocchi et al. [1987])
-            ! - Radiative transfer of direct and diffuse radiation in the 
-            !   canopy using equations (12)-(16) from Guenther et al. 
-            !   [1995]
-            ! - Separate accounting of sunlit and shaded leaves using
-            !   equation (12) of Guenther et al. [1995]
-            ! - Partitioning of the radiation at the top of the canopy 
-            !   into direct and diffuse components using a 
-            !   parameterization to results from an atmospheric radiative 
-            !   transfer model [Wang, 1996]
-            !
-            ! The dependent variables of the function BIOFIT are the leaf 
-            ! area index (XYLAI), the cosine of zenith angle (SUNCOS) and 
-            ! the fractional cloud cover (CFRAC).  The factor GFACI 
-            ! integrates the light dependence over the canopy depth; so
-            ! be scaled by LAI to yield a bulk canopy value because that's 
-            ! already done in the GFACI formulation.
+!-------------------------------------------------------------
+! Adjust stomatal resistances for insolation and temperature:  
+! 
+! Temperature adjustment is from Wesely [1989], equation (3).
+! 
+! Light adjustment by the function BIOFIT is described by Wang 
+! [1996].  It combines:
+!
+! - Local dependence of stomal resistance on the intensity I 
+!   of light impinging the leaf; this is expressed as a 
+!   multiplicative factor I/(I+b) to the stomatal resistance 
+!   where b = 50 W m-2
+!   (equation (7) of Baldocchi et al. [1987])
+! - Radiative transfer of direct and diffuse radiation in the 
+!   canopy using equations (12)-(16) from Guenther et al. 
+!   [1995]
+! - Separate accounting of sunlit and shaded leaves using
+!   equation (12) of Guenther et al. [1995]
+! - Partitioning of the radiation at the top of the canopy 
+!   into direct and diffuse components using a 
+!   parameterization to results from an atmospheric radiative 
+!   transfer model [Wang, 1996]
+!
+! The dependent variables of the function BIOFIT are the leaf 
+! area index (XYLAI), the cosine of zenith angle (SUNCOS) and 
+! the fractional cloud cover (CFRAC).  The factor GFACI 
+! integrates the light dependence over the canopy depth; so
+! be scaled by LAI to yield a bulk canopy value because that's 
+! already done in the GFACI formulation.
 !*************************************************************
       INTEGER KK
       PARAMETER (KK=4)
