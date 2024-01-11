@@ -62,12 +62,12 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
          Trate, Qbeamv,Qdiffv, Qbeamn, Qdiffn, &
          QbAbsV,Ea1tCanopy, Ea1pCanopy,        &
          TairK0, HumidairPa0, Ws0, SH
-    real,dimension(LAYERS) :: VPgausWt, VPgausDis2,VPgausDis, VPslwWT, &
-         QdAbsV, QsAbsV, QdAbsn,QsAbsn,                              &
-         SunQv, ShadeQv, SunQn, ShadeQn,                             &
-         TairK, HumidairPa, Ws, SunleafSH, sun_ppfd,shade_ppfd,      &
-         SunleafLH,SunleafIR, ShadeleafSH, sun_tk,shade_tk,sun_frac, &
-         ShadeleafLH,ShadeleafIR, sun_ppfd_total, shade_ppfd_total,  &
+    real, dimension(LAYERS) :: VPgausWt, VPgausDis2,VPgausDis, VPslwWT, &
+         QdAbsV, QsAbsV, QdAbsn,QsAbsn,                                 &
+         SunQv, ShadeQv, SunQn, ShadeQn,                                &
+         TairK, HumidairPa, Ws, SunleafSH, sun_ppfd,shade_ppfd,         &
+         SunleafLH,SunleafIR, ShadeleafSH, sun_tk,shade_tk,sun_frac,    &
+         ShadeleafLH,ShadeleafIR, sun_ppfd_total, shade_ppfd_total,     &
          sun_tk_total, shade_tk_total, sun_frac_total
 
     real,dimension(layers) :: sunt,shat,sunf,sunp,shap
@@ -137,11 +137,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
 
         !from megcan -----------
         !print*,"MEGCAN.."
-        sunt(:) = temp(i,j) !default values for output !sunt(i,j,:) = temp(i,j) !
-        shat(:) = temp(i,j)                            !shat(i,j,:) = temp(i,j) !
-        sunp(:) = rad(i,j)                             !sunp(i,j,:) = rad(i,j)  !
-        shap(:) = rad(i,j)                             !shap(i,j,:) = rad(i,j)  !
-        sunf(:) = 1.0                                  !sunf(i,j,:) = 1.0       !
+        sunt(:) = temp(i,j) !default values
+        shat(:) = temp(i,j)                
+        sunp(:) = rad(i,j)                 
+        shap(:) = rad(i,j)                 
+        sunf(:) = 1.0                      
         TotalCT=sum(ctf(i,j,:)) !*0.01
         if (totalCT .gt. 0.0 .AND. LAIc(i,j) .gt. 0.0 ) then
 
@@ -210,11 +210,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
                 sun_frac_total(:)   = sun_frac_total(:)   + sun_frac(:)  * ctf(i,j,k)!*0.01
              endif
            enddo
-           sunt(:) = sun_tk_total(:)    / TotalCT  !sunt(i,j,:) = sun_tk_total(:)    / TotalCT !
-           shat(:) = shade_tk_total(:)  / TotalCT  !shat(i,j,:) = shade_tk_total(:)  / TotalCT !
-           sunp(:) = sun_ppfd_total(:)  / TotalCT  !sunp(i,j,:) = sun_ppfd_total(:)  / TotalCT !
-           shap(:) = shade_ppfd_total(:)/ TotalCT  !shap(i,j,:) = shade_ppfd_total(:)/ TotalCT !
-           sunf(:) = sun_frac_total(:)  / TotalCT  !sunf(i,j,:) = sun_frac_total(:)  / TotalCT !
+           sunt(:) = sun_tk_total(:)    / TotalCT 
+           shat(:) = shade_tk_total(:)  / TotalCT 
+           sunp(:) = sun_ppfd_total(:)  / TotalCT 
+           shap(:) = shade_ppfd_total(:)/ TotalCT 
+           sunf(:) = sun_frac_total(:)  / TotalCT 
 
         else if (totalCT .lt. 0) then
                print*,"Send ERROR message!"             !Send ERROR message!
