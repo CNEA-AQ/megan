@@ -603,6 +603,8 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
      !Defino variables
      !call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
      !call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
+     call check(nf90_def_var(ncid, 'lat' , NF90_FLOAT   , [x_dim_id,y_dim_id], var_id) )
+     call check(nf90_def_var(ncid, 'lon' , NF90_FLOAT   , [x_dim_id,y_dim_id], var_id) )
      call check(nf90_def_var(ncid,"Times",  NF90_CHAR   , [str_dim_id,t_dim_id], var_id))
      call check(nf90_put_att(ncid, var_id, "units"      , "%Y-%m-%d %H:%M:%S"       ))
      call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
@@ -617,6 +619,8 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
 
    !Abro NetCDF y guardo variables de salida
    call check(nf90_open(trim(out_file), nf90_write, ncid       ))
+     call check(nf90_inq_varid(ncid,"lat"  ,var_id)); call check(nf90_put_var(ncid, var_id, lat )) !area/mapfactor_squared = (g%dx*g%dy)/(mapfac*mapfac)
+     call check(nf90_inq_varid(ncid,"lon"  ,var_id)); call check(nf90_put_var(ncid, var_id, lon )) !area/mapfactor_squared = (g%dx*g%dy)/(mapfac*mapfac)
      call check(nf90_inq_varid(ncid,"Times",var_id)); call check(nf90_put_var(ncid, var_id, Times_array )) !area/mapfactor_squared = (g%dx*g%dy)/(mapfac*mapfac)
      do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
        !print*,"    Especie:",trim(mech_spc(k))
