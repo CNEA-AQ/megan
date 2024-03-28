@@ -1,6 +1,6 @@
-# MEGAN Emission Model
+# Model of Emissions of Gases and Aerosols from Nature (MEGAN)
 
-> `megan` is a model to estimate biogenic VOCs emissions developed by Alex Guenther and his group. The code on this repository is an UN-OFFICIAL re-adaptation of that model.
+> `megan` is a model to estimate biogenic VOCs emissions, it has been developed by Alex Guenther and his group. The code on this repository is an UN-OFFICIAL re-adaptation of that model.
 
 ## Dependencies:
 
@@ -27,7 +27,7 @@ Edit the Makefile to set the compiler and path to NetCDF lib and include files. 
 
 `> make`
 
-If the compilation is successful, the executable `meganv3.2.exe` should be created.
+If the compilation is successful, the executable `meganv3.3.exe` should be created.
 
 ## Run
 
@@ -55,9 +55,9 @@ Edit the namelist `namelist_megan` that contains the following variables:
 
 > (!) Note that the variables must be adjusted to match the appropriate values for your system.
 
-Then execute `megan_v3.2.exe`:
+Then execute `megan_v3.3.exe`:
 
-`> ./megan_v3.2.exe < namelist_megan` 
+`> ./megan_v3.3.exe < namelist_megan` 
 
 Please feel free to contact the developer if you have any issues or suggestions.
 
