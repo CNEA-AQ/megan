@@ -122,7 +122,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
         end do
     ENDIF
 
-    select case (trim(LSM))
+    select case (trim(LSM)) !get Land Surface Model - Parameters
            case ('NOAH' )
               allocate(wwlt(size(wwlt_noah))); wwlt=wwlt_noah;
            case ('JN90' )
@@ -139,11 +139,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
         !print*,"MEGCAN.."
         sunt(:) = temp(i,j) !default values
         shat(:) = temp(i,j)                
-        sunp(:) = rad(i,j)                 
-        shap(:) = rad(i,j)                 
+        sunp(:) = rad(i,j )                 
+        shap(:) = rad(i,j )                 
         sunf(:) = 1.0                      
-        TotalCT=sum(ctf(i,j,:)) !*0.01
-        if (totalCT .gt. 0.0 .AND. LAIc(i,j) .gt. 0.0 ) then
+        TotalCT=sum(ctf(i,j,:)) !*0.01                         !if sum of canopy fractions == 0 => no (canopy) vegetation.
+        if (totalCT .gt. 0.0 .AND. LAIc(i,j) .gt. 0.0 ) then   !if some vegetation
 
            ! Convert to "solar hour": 
            Hour  = real(HH) + long(i,j) / 15.0

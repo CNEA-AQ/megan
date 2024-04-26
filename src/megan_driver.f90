@@ -1,8 +1,8 @@
 program main
-   ! program:     MEGAN v3.2
+   ! program:     MEGAN v3.3
    ! description: biogenic VOCs emission model (by Alex Guenther)
    ! authors:     Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, among others.
-   ! adapted by:  Ramiro Espada (date: 11/2023)
+   ! programmed:  Ramiro A. Espada
 
    use netcdf   
    use voc_mod  !megan module: (megan_voc)
@@ -28,29 +28,33 @@ program main
    INCLUDE 'tables/MAP_CV2SAPRC07.EXT'
    INCLUDE 'tables/MAP_CV2SAPRC07T.EXT'
 
-   integer :: iostat
-   integer :: t,i !,j,k
-   
+   !Strucs/Extended Types
    type grid_type
        integer  :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
        real     :: dx,dy     
    end type grid_type
+
+   !Variables: 
+   integer :: iostat
+   integer :: t,i !,j,k
+
    type(grid_type) :: grid
 
    !namelist variables:
-   character(len=19) :: start_date, end_date
-   character(len=16) :: mechanism='CBM05' !'CBM6' 'CB6A7', 'RACM2','CRACM', 'SAPRC' 'NOCON'
-   logical           :: prep_megan=.false., bdnsp_soil_model=.false.
-   character(250)    :: ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file
-   character(250)    :: met_files(24)=""
-   character(4)      :: lsm
+   character(len=19) :: start_date, end_date, this_date
+   character(len=16) :: mechanism='CBM05'            !'CBM6' 'CB6A7', 'RACM2','CRACM', 'SAPRC' 'NOCON'
+   character(250)    :: met_files !met_files(24)=""  !path to wrf meteo files
+   character(4)      :: lsm                          !land surface model used on meteo: NOAH, JN90
+   character(250)    :: ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file !prep-megan files
+   logical           :: prep_megan=.false., bdnsp_soil_model=.false.                     !flags 
 
    !date-time vars:
-   integer      :: end_date_s,current_date_s,n_hours
-   character(4) :: YYYY,current_year
-   character(3) :: DDD,current_jday
+   character(4) :: YYYY,current_year                           
+   character(3) :: DDD,current_jday                            
    character(2) :: MM,DD,HH,current_day="99",current_month="99"
+   integer      :: end_date_s,current_date_s!,n_hours
    character(19),dimension(24) :: Times_array=""
+
    !input variables:
    character(19), allocatable, dimension(:) :: times                         !(t)     <- from wrfout
    real,    allocatable, dimension(:,:)     :: lon,lat,mapfac                !(x,y)   <- from wrfout
@@ -63,12 +67,12 @@ program main
    real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) from prep_megan
 
    !intermediate vars:
-   character(250)     :: met_file
-   integer            :: n_met_files, head
-   real, allocatable, dimension(:,:) :: wind                                      !(x,y,t) from wrfout
+   character(250)     :: met_file                                                 !path to current met file beeing reading
+   real, allocatable, dimension(:,:) :: wind                                      !(x,y,t) windspeed (from wrfout)
    real, allocatable, dimension(:,:) :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
+
    !output vars:
-   real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all      !(x,y,nclass,t)
+   real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all          !(x,y,nclass,t)
 
    !---read namelist variables and parameters
    namelist/megan_nl/start_date,end_date,met_files,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file,mechanism,lsm !griddesc_file,gridname,
@@ -78,53 +82,43 @@ program main
      stop
    end if
 
-   !---Cambiar para que acepte multiples archivos y busuqe la fecha donde corresponda
-   print '("Archivos meteorologicos.. ")'
-   do i=1,size(met_files)
-      if (met_files(i) =="") then
-         n_met_files=i-1; exit
-      else 
-           print*,met_files(i)
-      endif
-   end do
-   head=1
-   met_file=met_files(head)
-
    !---
    print '("Select chemical mechanism and species.. ")'
    call select_megan_mechanism(mechanism)
-   print*,"  Mecanísmo: ",mechanism,".  Especies: ",size(megan_names),n_spca_spc
+   print*,"  Mecanism: ",mechanism,".  Species: ",size(megan_names),n_spca_spc
 
    !---
-   print '("Read meteo grid parameters, times and coordinates.. ")'
+   print '("Read meteo grid parameters, coordinates, and times.. ")'
+   met_file=update_filename(met_files, start_date)
    call get_meteofile_info(met_file, grid, lat, lon, times)
-   
+
    !--- 
    print '("Get static data.. ")'
-   call prep_static_data(grid) !,arid,non_arid,landtype,ctf,ef,ldf)
+   call get_static_data(grid) !,arid,non_arid,landtype,ctf,ef,ldf)
  
    !--- 
    print '("Allocating output buffer.. ")' 
    allocate(out_buffer_all(grid%nx,grid%ny,n_spca_spc,0:23))!24)) !main out array
    allocate(out_buffer(grid%nx,grid%ny,NCLASS,0:23))        !24)) !non-dimensional emision rates of each megan species categories
 
-   !--- 
+   !=== 
    print '("Temporal loop.. ")'
    current_date_s = atoi( date(start_date, "%s"))
        end_date_s = atoi( date(  end_date, "%s"))
-   n_hours=floor(real((end_date_s-current_date_s)/3600))
-
+   !n_hours=floor(real((end_date_s-current_date_s)/3600))
    do while (current_date_s <= end_date_s)
 
       call seconds_to_date(current_date_s,YYYY,MM,DD,DDD,HH)
+      this_date=YYYY//"-"//MM//"-"//DD//" "//HH//":00:00"
+      met_file=update_filename(met_files,this_date)
 
       if ( current_day /= DD .or. current_date_s == end_date_s ) then
          if ( current_day /= "99" ) then
-            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)  !convert to mechanism species before write the output
-            !call write_output_file(grid,YYYY,DDD,MECHANISM)
+            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)   !convert to mechanism species before write the output
             call write_output_file(grid,current_year,current_jday,MECHANISM)
             if ( current_date_s == end_date_s ) stop 'End of run.';
          endif
+
          current_day=DD;current_jday=DDD;current_year=YYYY
          call get_daily_data(grid,DDD)
          if ( current_month /= MM ) then
@@ -134,7 +128,7 @@ program main
          out_buffer=0.0;out_buffer_all=0.0;times_array=""
       endif    
                                                                           
-
+      !t=findloc( date == Times, .true.,1)   !get index in time dimension of current date-time
       t=get_t_index(Times, current_date_s) !met t-index. Hacer función más generica que tambien seleccione el archivo que necesita.
       Times_array(atoi(HH))=Times(t)
       print*,"t = ",t
@@ -185,39 +179,66 @@ subroutine check(status)            !netcdf error-check function
   end if
 end subroutine check
 
-function date(date_str, fmt_str) result(output) !Interfaz a "date"
+character(len=20) function date(date_str, fmt_str) result(output) !Interfaz a "date"
   implicit none
   integer :: iostat
   character(*), intent(in) :: date_str, fmt_str
   character(256)           :: command
-  character(20)            :: output
-  command="date -d '"//trim(date_str)//"' '+"//trim(fmt_str)//"'  > tmp_datejodemequeteneselmismonombrequeyo.txt"
+  !character(20)            :: output
+  command="date -d '"//trim(date_str)//"' '+"//trim(fmt_str)//"'  > tmp.date"
   call system( trim(command) )
   !print*,trim(command)
-  open(9, file='tmp_datejodemequeteneselmismonombrequeyo.txt', status='old',action='read'); read(9, '(A)', iostat=iostat) output;  close(9)
-  call system('rm tmp_datejodemequeteneselmismonombrequeyo.txt')
+  open(9, file='tmp.date', status='old',action='read'); read(9, '(A)', iostat=iostat) output;  close(9)
+  call system('rm tmp.date')
 end function
 
-function atoi(str)     !string -> int
+integer function atoi(str)               !string -> int
   implicit none
   character(len=*), intent(in) :: str
-  integer :: atoi
   read(str,*) atoi
 end function
-function itoa(i)       !int -> string
+character(len=20) function itoa(i)       !int -> string
    implicit none
    integer, intent(in) :: i
-   character(len=20) :: itoa
+   !character(len=20) :: itoa
    write(itoa, '(i0)') i
    itoa = adjustl(itoa)
 end function
-function rtoa(r)       !real -> string
+character(len=16) function rtoa(r)       !real -> string
    implicit none
    real, intent(in) :: r
-   character(len=16) :: rtoa
+   !character(len=16) :: rtoa
    write(rtoa, '(F16.3)') r
    rtoa = adjustl(rtoa)
 end function
+
+pure function replace(string, s1, s2) result(res)
+    !replace substring "s1" with "s2" on string
+    character(*), intent(in) :: string,s1,s2
+    character(len(string))   :: str
+    character(len(string))   :: res
+    integer :: i,j,n,n1,n2
+    str=string
+    n =len(str); n1=len(s1); n2=len(s2)
+    if ( n1 == n2 ) then
+       res=str
+       do i=1,n-n1
+          if ( str(i:i+n1) == s1 ) res(i:i+n1) = s2
+       end do
+    else
+       j=0
+       do i=1,n-n1
+          if ( i < j ) cycle            !used to skip iterations
+          if ( str(i:i+n1) == s1 ) then !match s1 on str
+             res(i:i+n2) = s2           !replace s1->s2
+             str(i+n2:n) = str(i+n1:n)  !move str to
+             j=i+n2                     !set "j" to skip next n2-iterations
+          else
+             res(i:i)=str(i:i)          !replace with original str
+          endif
+       end do
+    endif
+end function replace
 
 subroutine seconds_to_date(date_s,yyyy,mm,dd,ddd,hh)
    implicit none
@@ -273,9 +294,22 @@ subroutine get_meteofile_info(meteo_file,g,lat,lon,times)
       Times(t)(i:i)=' '
    enddo
 
-print*,"nx, ny, nt, dx, dy, times: ",g%nx,g%ny,g%nt,g%dy,g%dy,times
-
+   print*,"nx, ny, nt, dx, dy, times: ",g%nx,g%ny,g%nt,g%dy,g%dy,times
 end subroutine
+
+character(250) function update_filename(file_names, idate)
+    !update file name according to flags. if no flags do nothing
+    implicit none
+    character(len=*),intent(in) :: file_names
+    character(len=*),intent(in) :: idate
+    character(len=4) :: YYYY
+    character(len=3) :: DDD
+    character(len=2) :: MM, DD, HH
+    update_filename=file_names
+    read(date(idate,'%Y %m %d %j %H'),'(A4,A2,A2,A3,A2)'),YYYY,MM,DD,DDD,HH                                          
+    if ( index(met_files,"<date>" ) /= 0 ) update_filename=replace(met_files,"<date>" ,YYYY//"-"//MM//"-"//DD)
+    if ( index(met_files,"<time>" ) /= 0 ) update_filename=replace(met_files,"<time>" ,  HH//":00:00")           
+end function
 
 integer function get_t_index(times,current_date_s)
   implicit none
@@ -288,9 +322,9 @@ integer function get_t_index(times,current_date_s)
          get_t_index=i;exit;
      endif
   enddo
-endfunction
+end function
 
-subroutine prep_static_data(g) 
+subroutine get_static_data(g) 
   implicit none
   type(grid_type) :: g
   integer         :: i,j,k
@@ -368,6 +402,7 @@ subroutine get_hourly_data(g,t)
   if (.not. allocated(smois)) allocate(smois(g%nx,g%ny))
   if (.not. allocated(lai)  ) allocate(  lai(g%nx,g%ny))
   if (.not. allocated(wind) ) allocate( wind(g%nx,g%ny))
+
   call check(nf90_open(trim(met_file), nf90_write, ncid ))
     call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id,  U10, [1,1,t]  ))
     call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id,  V10, [1,1,t]  ))
@@ -456,88 +491,88 @@ end subroutine
 
 subroutine select_megan_mechanism(mechanism)
   implicit none
-    character( 16 )    :: mechanism     ! mechanism name
+  character( 16 )    :: mechanism     ! mechanism name
 
-       SELECT CASE ( TRIM(MECHANISM) )
-         CASE ('SAPRC07')
-           n_scon_spc = n_saprc07
-           NMGNSPC = n_saprc07_spc
-         CASE ('SAPRC07T')
-           n_scon_spc = n_saprc07t
-           NMGNSPC = n_saprc07t_spc
-         CASE ('CB05')
-           n_scon_spc = n_cb05
-           NMGNSPC = n_cb05_spc
-         CASE ('CB6')
-           n_scon_spc = n_cb6  ! 145
-           NMGNSPC = n_cb6_spc ! 34
-         CASE ('RACM2')
-           n_scon_spc = n_racm2
-           NMGNSPC = n_racm2_spc
-         CASE ('CB6_ae7')
-           n_scon_spc = n_cb6_ae7
-           NMGNSPC = n_cb6_ae7_spc
-         CASE ('CRACMM')
-           n_scon_spc = n_cracmm
-           NMGNSPC = n_cracmm_spc
-         CASE DEFAULT
-           print*,"Mechanism," // TRIM( MECHANISM) // ", is not identified.";stop
-       ENDSELECT
+  SELECT CASE ( TRIM(MECHANISM) )
+    CASE ('SAPRC07')
+      n_scon_spc = n_saprc07
+      NMGNSPC = n_saprc07_spc
+    CASE ('SAPRC07T')
+      n_scon_spc = n_saprc07t
+      NMGNSPC = n_saprc07t_spc
+    CASE ('CB05')
+      n_scon_spc = n_cb05
+      NMGNSPC = n_cb05_spc
+    CASE ('CB6')
+      n_scon_spc = n_cb6  ! 145
+      NMGNSPC = n_cb6_spc ! 34
+    CASE ('RACM2')
+      n_scon_spc = n_racm2
+      NMGNSPC = n_racm2_spc
+    CASE ('CB6_ae7')
+      n_scon_spc = n_cb6_ae7
+      NMGNSPC = n_cb6_ae7_spc
+    CASE ('CRACMM')
+      n_scon_spc = n_cracmm
+      NMGNSPC = n_cracmm_spc
+    CASE DEFAULT
+      print*,"Mechanism," // TRIM( MECHANISM) // ", is not identified.";stop
+  ENDSELECT
 
-       allocate(spmh_map(n_scon_spc))
-       allocate(mech_map(n_scon_spc))
-       allocate(conv_fac(n_scon_spc))
-       allocate(mech_spc(NMGNSPC )  )
-       allocate(mech_mwt(NMGNSPC )  )
-       allocate(MEGAN_NAMES(NMGNSPC))
+  allocate(spmh_map(n_scon_spc))
+  allocate(mech_map(n_scon_spc))
+  allocate(conv_fac(n_scon_spc))
+  allocate(mech_spc(NMGNSPC )  )
+  allocate(mech_mwt(NMGNSPC )  )
+  allocate(MEGAN_NAMES(NMGNSPC))
 
-       SELECT CASE ( TRIM(MECHANISM) )
-         CASE ('CB05')
-           spmh_map(1:n_scon_spc) = spmh_map_cb05(1:n_scon_spc)   !mechanism spc id
-           mech_map(1:n_scon_spc) = mech_map_cb05(1:n_scon_spc)   !megan     spc id
-           conv_fac(1:n_scon_spc) = conv_fac_cb05(1:n_scon_spc)   !conversion factor 
-           mech_spc(1:NMGNSPC)    = mech_spc_cb05(1:NMGNSPC)      !mechanism spc name
-           mech_mwt(1:NMGNSPC)    = mech_mwt_cb05(1:NMGNSPC)      !mechanism spc molecular weight
-         CASE ('CB6')
-           spmh_map(1:n_scon_spc) = spmh_map_cb6(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_cb6(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_cb6(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_cb6(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_cb6(1:NMGNSPC)
-         CASE ('RACM2')
-           spmh_map(1:n_scon_spc) = spmh_map_racm2(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_racm2(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_racm2(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_racm2(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_racm2(1:NMGNSPC)
-         CASE ('SAPRC07')
-           spmh_map(1:n_scon_spc) = spmh_map_saprc07(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_saprc07(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_saprc07(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_saprc07(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_saprc07(1:NMGNSPC)
-         CASE ('SAPRC07T')
-           spmh_map(1:n_scon_spc) = spmh_map_saprc07t(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_saprc07t(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_saprc07t(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_saprc07t(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_saprc07t(1:NMGNSPC)
-         CASE ('CB6_ae7')
-           spmh_map(1:n_scon_spc) = spmh_map_cb6_ae7(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_cb6_ae7(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_cb6_ae7(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_cb6_ae7(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_cb6_ae7(1:NMGNSPC)
-         CASE ('CRACMM')
-           spmh_map(1:n_scon_spc) = spmh_map_cracmm(1:n_scon_spc)
-           mech_map(1:n_scon_spc) = mech_map_cracmm(1:n_scon_spc)
-           conv_fac(1:n_scon_spc) = conv_fac_cracmm(1:n_scon_spc)
-           mech_spc(1:NMGNSPC)    = mech_spc_cracmm(1:NMGNSPC)
-           mech_mwt(1:NMGNSPC)    = mech_mwt_cracmm(1:NMGNSPC)
-         CASE DEFAULT
-           print*,"Mapping for Mechanism,"//TRIM(MECHANISM)//", is unspecified.";stop
-       ENDSELECT
-       MEGAN_NAMES(1:NMGNSPC) = mech_spc(1:NMGNSPC)
+  SELECT CASE ( TRIM(MECHANISM) )
+    CASE ('CB05')
+      spmh_map(1:n_scon_spc) = spmh_map_cb05(1:n_scon_spc)   !mechanism spc id
+      mech_map(1:n_scon_spc) = mech_map_cb05(1:n_scon_spc)   !megan     spc id
+      conv_fac(1:n_scon_spc) = conv_fac_cb05(1:n_scon_spc)   !conversion factor 
+      mech_spc(1:NMGNSPC)    = mech_spc_cb05(1:NMGNSPC)      !mechanism spc name
+      mech_mwt(1:NMGNSPC)    = mech_mwt_cb05(1:NMGNSPC)      !mechanism spc molecular weight
+    CASE ('CB6')
+      spmh_map(1:n_scon_spc) = spmh_map_cb6(1:n_scon_spc)
+      mech_map(1:n_scon_spc) = mech_map_cb6(1:n_scon_spc)
+      conv_fac(1:n_scon_spc) = conv_fac_cb6(1:n_scon_spc)
+      mech_spc(1:NMGNSPC)    = mech_spc_cb6(1:NMGNSPC)
+      mech_mwt(1:NMGNSPC)    = mech_mwt_cb6(1:NMGNSPC)
+    CASE ('RACM2')
+      spmh_map(1:n_scon_spc) = spmh_map_racm2(1:n_scon_spc)
+      mech_map(1:n_scon_spc) = mech_map_racm2(1:n_scon_spc)
+      conv_fac(1:n_scon_spc) = conv_fac_racm2(1:n_scon_spc)
+      mech_spc(1:NMGNSPC)    = mech_spc_racm2(1:NMGNSPC)
+      mech_mwt(1:NMGNSPC)    = mech_mwt_racm2(1:NMGNSPC)
+    CASE ('SAPRC07')
+      spmh_map(1:n_scon_spc) = spmh_map_saprc07(1:n_scon_spc)
+      mech_map(1:n_scon_spc) = mech_map_saprc07(1:n_scon_spc)
+      conv_fac(1:n_scon_spc) = conv_fac_saprc07(1:n_scon_spc)
+      mech_spc(1:NMGNSPC)    = mech_spc_saprc07(1:NMGNSPC)
+      mech_mwt(1:NMGNSPC)    = mech_mwt_saprc07(1:NMGNSPC)
+    CASE ('SAPRC07T')
+      spmh_map(1:n_scon_spc) = spmh_map_saprc07t(1:n_scon_spc)
+      mech_map(1:n_scon_spc) = mech_map_saprc07t(1:n_scon_spc)
+      conv_fac(1:n_scon_spc) = conv_fac_saprc07t(1:n_scon_spc)
+      mech_spc(1:NMGNSPC)    = mech_spc_saprc07t(1:NMGNSPC)
+      mech_mwt(1:NMGNSPC)    = mech_mwt_saprc07t(1:NMGNSPC)
+    CASE ('CB6_ae7')
+      spmh_map(1:n_scon_spc) = spmh_map_cb6_ae7(1:n_scon_spc)
+      mech_map(1:n_scon_spc) = mech_map_cb6_ae7(1:n_scon_spc)
+      conv_fac(1:n_scon_spc) = conv_fac_cb6_ae7(1:n_scon_spc)
+      mech_spc(1:NMGNSPC)    = mech_spc_cb6_ae7(1:NMGNSPC)
+      mech_mwt(1:NMGNSPC)    = mech_mwt_cb6_ae7(1:NMGNSPC)
+    CASE ('CRACMM')
+      spmh_map(1:n_scon_spc) = spmh_map_cracmm(1:n_scon_spc)
+      mech_map(1:n_scon_spc) = mech_map_cracmm(1:n_scon_spc)
+      conv_fac(1:n_scon_spc) = conv_fac_cracmm(1:n_scon_spc)
+      mech_spc(1:NMGNSPC)    = mech_spc_cracmm(1:NMGNSPC)
+      mech_mwt(1:NMGNSPC)    = mech_mwt_cracmm(1:NMGNSPC)
+    CASE DEFAULT
+      print*,"Mapping for Mechanism,"//TRIM(MECHANISM)//", is unspecified.";stop
+  ENDSELECT
+  MEGAN_NAMES(1:NMGNSPC) = mech_spc(1:NMGNSPC)
 
 end subroutine select_megan_mechanism
 
@@ -725,6 +760,5 @@ end subroutine write_output_file
 !@  call check(nf90_close( ncid ))
 !@end subroutine
 !@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
 
 end program main
