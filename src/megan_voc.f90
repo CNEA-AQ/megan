@@ -109,6 +109,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
     !@!real :: gamsm_map(ncols,nrows)       ! EA response to soil moisture
     !@!real ::    ER_map(ncols,nrows)       !emission rate
  
+    print*,"   > Exec. megan_voc"
+
     ! EA response to canopy temperature/light
     IF ( Layers .EQ. 5 ) THEN
         VPGWT(1) = 0.1184635

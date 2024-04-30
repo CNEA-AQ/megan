@@ -37,6 +37,8 @@ subroutine megan_nox(yyyy,ddd,hh,  &  !date-time
 
   integer :: i,j,k,i_ct
   
+  print*,"   > Exec. megan_nox"
+
   select case (LSM)
          case ('NOAH' )
             allocate(wsat(size(wsat_noah))) ; wsat=wsat_noah;
