@@ -1,6 +1,8 @@
 module nox_mod
    
    include 'tables/LSM.EXT'
+   !private
+   !public megan_nox
 
 contains
 

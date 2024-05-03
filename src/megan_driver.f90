@@ -644,7 +644,7 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
     real    :: tmper(ncols, nrows, n_spca_spc,ntimes)       ! Temp emission buffer
 
     !from mgn2mech ---------
-    print '("   > Exec. mgn2mech..")'
+    print '("   > Exec. mgn2mech")'
     tmper = 0.
     emis = 0.
     

@@ -1,11 +1,13 @@
 module voc_mod
 use netcdf
    implicit none
+   !private
+   !public megan_voc
 
    !Version dependent parameters:
    integer, parameter :: NrTyp  = 6   !Number of "Canopy types": trees (needle,broad,tropical),shrub,grass,crop.
    integer, parameter :: NCLASS = 19  !MEGAN Internal Emission Categories
-   integer, parameter :: layers=5     !canopy layers
+   integer, parameter :: layers = 5   !canopy layers
    !---
    integer, save :: nmgnspc           !number of megan     species
    integer, save :: n_scon_spc        !number of mechanism species
@@ -163,7 +165,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
            zenith      = CalcZenith(day,lat(i,j),hour)
            SinZenith   = sin(zenith / 57.29578) !57.29578=rad2deg
            Eccentricity= CalcEccentricity(Day)
-           Maxsolar = SinZenith * SolarConstant * Eccentricity
+           Maxsolar    = SinZenith * SolarConstant * Eccentricity
 
            !(2) gaussian dist.
            call GaussianDist(VPgausDis, layers)
@@ -195,6 +197,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
 
                 HumidairPa0  =  WaterVapPres(qv(i,j), pres(i,j), waterairratio)
                 Trate        =  Stability(Canopychar, k, Solar , NrCha, NrTyp)
+
                 !(5) canopy energy balance (temp)
                 !
                 call CanopyEB(Trate, Layers, VPgausDis, Canopychar, k,    &
@@ -203,6 +206,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
                       sun_tk, SunleafSH, SunleafLH, SunleafIR,            &
                       shade_tk,ShadeleafSH,ShadeleafLH,ShadeleafIR,       &
                       NrCha, NrTyp, Ws0, TairK0, HumidairPa0)
+
                 !(6) compute output variables
                 !
                 sun_ppfd_total(:)   = sun_ppfd_total(:)   + sun_ppfd(:)  * ctf(i,j,k)!*0.01
@@ -769,7 +773,7 @@ SUBROUTINE CanopyRad(Distgauss, Layers, LAI, SinZenith,           &
         ENDDO
 
      ELSE                           ! Night time
-       QbAbsV    = 0;   QbAbsn       = 0
+       QbAbsV    = 0  ; QbAbsn      = 0
        Sunfrac(:)= 0.2; SunQn(:)    = 0; ShadeQn(:) = 0
        SunQv(:)  = 0  ; ShadeQv(:)  = 0; SunPPFD(:) = 0; ShadePPFD(:)= 0
        QdAbsV(:) = 0  ; QsAbsV(:)   = 0; QdAbsn(:)  = 0; QsAbsn(:)   = 0
