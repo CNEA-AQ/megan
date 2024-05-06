@@ -8,6 +8,7 @@ program main
    use voc_mod  !megan module: (megan_voc)
    use nox_mod  !megan module: (megan_nox)
    !use bdsnp   !megan module: (bdsnp_nox)
+   use prep_megan
    
    implicit none
 
@@ -75,13 +76,33 @@ program main
    !output vars:
    real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all          !(x,y,nclass,t)
 
+   !prep-megan namelist variables:
+   character(200):: griddesc_file, gridname, ecotypes_glb, growtype_glb, laiv_glb, climate_glb, fert_glb,landtype_glb,nitro_glb,GtEcoEF
+
    !---read namelist variables and parameters
-   namelist/megan_nl/start_date,end_date,met_files,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file,mechanism,lsm 
+   namelist/prep_megan_nl/griddesc_file, gridname, ecotypes_glb, growtype_glb, laiv_glb, nitro_glb, fert_glb, climate_glb, landtype_glb, GtEcoEF
+   namelist/megan_nl/start_date,end_date,met_files,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file,mechanism,lsm,prep_megan, bdnsp_soil_model
+                                                                                                                                              
    read(*,nml=megan_nl, iostat=iostat)
    if( iostat /= 0 ) then
      write(*,*) 'megan: failed to read namelist; error = ',iostat
      stop
    end if
+   !Leo namelist (prep megan)
+   read(*,nml=prep_megan_nl, iostat=iostat)
+   if( iostat /= 0 ) then
+     write(*,*) 'prepmegan4cmaq: failed to read namelist; error = ',iostat
+     stop
+   end if
+
+
+!PREP-MEGAN-------------------------------------------------------------
+if (prep_megan) then
+  !Run prep megan
+  call prep(griddesc_file,gridname,ecotypes_glb, growtype_glb, laiv_glb, GtEcoEF,                  &
+                                   bdnsp_soil_model, nitro_glb,fert_glb, climate_glb, landtype_glb )
+  stop
+end if
 
 !MAIN ------------------------------------------------------------------
    print '(" ==========================" )' 

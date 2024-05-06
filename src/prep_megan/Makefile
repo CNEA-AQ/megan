@@ -4,7 +4,7 @@ FC   = gfortran
 LIBS = -L/usr/lib/x86_64-linux-gnu -lnetcdf -lnetcdff -lm 
 INC  = -I/usr/include
 
-FCFLAGS = -O2 -ffree-line-length-none #-Wunused 
+FCFLAGS = -O2 -ffree-line-length-none -Wunused 
 LDFLAGS = -O2
 EXE  = prep_megan.exe
 OBJS = prep_megan.o 
