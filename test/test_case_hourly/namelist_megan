@@ -1,0 +1,31 @@
+&megan_nl
+   start_date='2019-01-01 18:00:00',  !YYYY-MM-DD HH:MM:SS
+   end_date  ='2019-01-02 07:00:00',  !YYYY-MM-DD HH:MM:SS
+
+   met_files='wrfout_d01_<date>_<time>', !Pattern of meteo files paths
+
+   LSM='NOAH', !'JN90', !       ! land surface model (LSM) used in meteo
+
+  mechanism='CB05',                   !'RACM2','CB05',CB6_ae7','CRACMM','SAPRC07',
+  
+   static_file='prep_mgn_static.nc',  ! NetCDF file w/ CTF, EFs, LDF & LAND  layers (created by prep_megan)
+  dynamic_file='prep_mgn_dynamic.nc', ! NetCDF file w/ LAI, NDEP & NFERT leyers     (created by prep_megan)
+
+  run_bdsnp = .false. ,               ! run bdsnp soil model for NO emissions?
+  prep_megan = .false.,               ! run prep_megan?
+/
+&prep_megan_nl
+   griddesc='GRIDDESC',
+   gridname='MERC_TEST',!'LCC_TAN_TEST',
+   
+   eco_glb='input/veg_Ecotypes.nc',
+   ctf_glb='input/veg_GrowthFormFracions.nc',
+   lai_glb='input/veg_LAIv.nc',
+   
+   clim_glb='input/soil_climate.nc',
+   land_glb='input/soil_landtype.nc',
+   ndep_glb='input/soil_nitro.nc',
+   fert_glb='input/soil_fert.nc',
+
+   GtEcoEF="db/GtEFbyEcotype.csv",    !Emission factor of each GT grouped by Ecotype
+/

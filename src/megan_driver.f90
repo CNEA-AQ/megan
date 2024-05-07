@@ -44,10 +44,11 @@ program main
    !namelist variables:
    character(len=19) :: start_date, end_date
    character(len=16) :: mechanism='CBM05'            !'CBM6' 'CB6A7', 'RACM2','CRACM', 'SAPRC' 'NOCON'
-   character(250)    :: met_files !met_files(24)=""  !path to wrf meteo files
    character(4)      :: lsm                          !land surface model used on meteo: NOAH, JN90
-   character(250)    :: ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file !prep-megan files
-   logical           :: prep_megan=.false., bdnsp_soil_model=.false.                     !flags 
+   character(250)    :: met_files !met_files(24)=""  !path to wrf meteo files
+   character(250)    :: static_file='prep_mgn_static.nc',dynamic_file='prep_mgn_dynamic.nc' !prep-megan files
+   !character(250)    :: ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file !prep-megan files
+   logical           :: prep_megan=.false., run_bdsnp=.false.                     !flags 
 
    !date-time vars:
    character(4) :: YYYY,current_year                           
@@ -69,6 +70,7 @@ program main
    real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) from prep_megan
 
    !intermediate vars:
+   logical :: fileExists=.false.
    character(250)                    :: met_file                                  !path to current met file beeing reading
    real, allocatable, dimension(:,:) :: wind                                      !(x,y,t) windspeed (from wrfout)
    real, allocatable, dimension(:,:) :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
@@ -77,17 +79,23 @@ program main
    real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all          !(x,y,nclass,t)
 
    !prep-megan namelist variables:
-   character(200):: griddesc_file, gridname, ecotypes_glb, growtype_glb, laiv_glb, climate_glb, fert_glb,landtype_glb,nitro_glb,GtEcoEF
+   character(200):: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
 
    !---read namelist variables and parameters
-   namelist/prep_megan_nl/griddesc_file, gridname, ecotypes_glb, growtype_glb, laiv_glb, nitro_glb, fert_glb, climate_glb, landtype_glb, GtEcoEF
-   namelist/megan_nl/start_date,end_date,met_files,ctf_file,lai_file,ef_file,ldf_file,ndep_file,fert_file,land_file,mechanism,lsm,prep_megan, bdnsp_soil_model
-                                                                                                                                              
+   namelist/megan_nl/start_date,end_date,met_files,lsm,mechanism,static_file,dynamic_file,prep_megan,run_bdsnp
+   namelist/prep_megan_nl/ griddesc,gridname,eco_glb,ctf_glb,lai_glb,GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
+
    read(*,nml=megan_nl, iostat=iostat)
    if( iostat /= 0 ) then
      write(*,*) 'megan: failed to read namelist; error = ',iostat
      stop
    end if
+
+!PREP-MEGAN-------------------------------------------------------------
+inquire(file=trim(static_file ), exist=fileExists) !check if prep_megan files already present
+inquire(file=trim(dynamic_file), exist=fileExists) !check if prep_megan files already present
+
+if ( prep_megan .or. (.not. fileExists) ) then
    !Leo namelist (prep megan)
    read(*,nml=prep_megan_nl, iostat=iostat)
    if( iostat /= 0 ) then
@@ -95,12 +103,11 @@ program main
      stop
    end if
 
+  print '("========================",/," Runing PREP-MEGAN")'
+  call prep(griddesc,gridname,eco_glb,ctf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb)
 
-!PREP-MEGAN-------------------------------------------------------------
-if (prep_megan) then
-  !Run prep megan
-  call prep(griddesc_file,gridname,ecotypes_glb, growtype_glb, laiv_glb, GtEcoEF,                  &
-                                   bdnsp_soil_model, nitro_glb,fert_glb, climate_glb, landtype_glb )
+  print '("Files ",A19," and ",A19," has been created by prep_megan")',static_file,dynamic_file
+  print '("Re run it to execute MEGAN.                             ")'
   stop
 end if
 
@@ -189,7 +196,7 @@ end if
 
       !----------------------
       !soil NO model:
-      if ( bdnsp_soil_model ) then
+      if ( run_bdsnp ) then
           !call bdsnp_nox()                                
       else
           call megan_nox(atoi(yyyy),atoi(ddd),atoi(hh),  & !date: year, julian day, hour.
@@ -359,45 +366,27 @@ subroutine get_static_data(g)
   allocate(  ldf_in(g%nx,g%ny,size(ldf_vars)))
   allocate(     ctf(g%nx,g%ny,NRTYP         ))
 
-  if ( bdnsp_soil_model ) then
+  if ( run_bdsnp ) then
      allocate(    arid(g%nx,g%ny               ))
      allocate(non_arid(g%nx,g%ny               ))
      allocate(landtype(g%nx,g%ny               ))
-     print '("   Reading: ",A50))',land_file !debug
+     print '("   Reading: ",A50))',trim(static_file)//":LAND" !static_file !land_file !debug
      !LAND                                                                               
-     call check(nf90_open(trim(land_file), nf90_write, ncid ))
+     !call check(nf90_open(trim(land_file), nf90_write, ncid ))
+     call check(nf90_open(trim(static_file), nf90_write, ncid ))
         call check( nf90_inq_varid(ncid,'LANDTYPE', var_id )); call check( nf90_get_var(ncid, var_id, LANDTYPE ))
         call check( nf90_inq_varid(ncid,'ARID'    , var_id )); call check( nf90_get_var(ncid, var_id, ARID     ))
         call check( nf90_inq_varid(ncid,'NONARID' , var_id )); call check( nf90_get_var(ncid, var_id, NON_ARID ))
      call check(nf90_close(ncid))
   endif
-  !CTS (canopy type fractions)
-   print '("   Reading: ",A50))',ctf_file !debug
-  call check(nf90_open(trim(ctf_file), nf90_write, ncid ))
-      call check( nf90_inq_varid(ncid,'CTS', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1,1],[g%nx,g%ny,1,NRTYP]))
-      !call check( nf90_inq_varid(ncid,'NEEDL', var_id )); call check( nf90_get_var(ncid, var_id, NEEDL ))
-      !call check( nf90_inq_varid(ncid,'TROPI', var_id )); call check( nf90_get_var(ncid, var_id, TROPI ))
-      !call check( nf90_inq_varid(ncid,'BROAD', var_id )); call check( nf90_get_var(ncid, var_id, BROAD ))
-      !call check( nf90_inq_varid(ncid,'SHRUB', var_id )); call check( nf90_get_var(ncid, var_id, SHRUB ))
-      !call check( nf90_inq_varid(ncid,'GRASS', var_id )); call check( nf90_get_var(ncid, var_id, GRASS ))
-      !call check( nf90_inq_varid(ncid,'CROP' , var_id )); call check( nf90_get_var(ncid, var_id, CROP  ))
+  !CTS, EFS, LDF 
+   print '("   Reading: ",A50))',trim(static_file) !debug
+  call check(nf90_open(trim(static_file), nf90_write, ncid ))
+      call check( nf90_inq_varid(ncid,'CTF', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1,1],[g%nx,g%ny,1,NRTYP]))
+      call check( nf90_inq_varid(ncid,"EFS", var_id )); call check( nf90_get_var(ncid, var_id , EF ))  !new v3.3
+      call check( nf90_inq_varid(ncid,"LDF", var_id )); call check( nf90_get_var(ncid, var_id , LDF ))  !new v3.3
   call check(nf90_close(ncid))
   ctf=CTF*0.01  !from % to [0-1].
-  !EF:
-  print '("   Reading: ",A50))', ef_file !debug
-  call check(nf90_open(trim(  ef_file), nf90_write, ncid ))
-  do k=1,size(ef_vars)
-     call check( nf90_inq_varid(ncid,trim( ef_vars(k)), var_id )); call check( nf90_get_var(ncid, var_id , EF(:,:,k) ))
-  enddo
-  call check(nf90_close(ncid))
-
-  !LDF:
-  print '("   Reading: ",A50))',ldf_file !debug
-  call check(nf90_open(trim(ldf_file), nf90_write, ncid ))
-  do k=1,size(ldf_vars)
-     call check( nf90_inq_varid(ncid,trim(ldf_vars(k)), var_id )); call check( nf90_get_var(ncid, var_id ,ldf_in(:,:,k) ))
-  enddo
-  call check(nf90_close(ncid))
 
   !From meteo:
   print '("   Reading: ",A50))',met_file !debug
@@ -457,9 +446,10 @@ subroutine get_daily_data(g,DDD)
   
     print*,"   Prep. daily data.."
     !from prepmegan:
-    if ( bdnsp_soil_model ) then
+    if ( run_bdsnp ) then
        if (.not. allocated(fert)) then; allocate( fert(g%nx,g%ny));endif
-       call check(nf90_open(trim(fert_file), nf90_write, ncid ))
+       !call check(nf90_open(trim(fert_file), nf90_write, ncid ))
+       call check(nf90_open(trim(dynamic_file), nf90_write, ncid ))
              call check(   nf90_inq_varid(ncid,'FERT'//DDD, var_id )); call check( nf90_get_var(ncid, var_id , FERT ))
        call check(nf90_close(ncid))
     endif
@@ -501,13 +491,13 @@ subroutine get_monthly_data(g,MM)!,lai,ndep)
   character(len=2)  :: MM
   integer           :: ncid,var_id
   print*,"   Prep. monthly data.."
-  if ( bdnsp_soil_model ) then
+  if ( run_bdsnp ) then
      if (.not. allocated(ndep)) then; allocate(ndep(g%nx,g%ny));endif
      !if (.not. allocated(lai) ) then; allocate( lai(g%nx,g%ny));endif
      !call check(nf90_open( trim(lai_file), nf90_write, ncid ))
      !   call check( nf90_inq_varid(ncid,'LAI'//MM    , var_id )); call check( nf90_get_var(ncid, var_id , LAI  ))
      !call check(nf90_close(ncid))
-     call check(nf90_open( trim(ndep_file), nf90_write, ncid ))
+     call check(nf90_open( trim(dynamic_file), nf90_write, ncid ))
         call check( nf90_inq_varid(ncid,'NITROGEN'//MM, var_id )); call check( nf90_get_var(ncid, var_id , NDEP ))
      call check(nf90_close(ncid))
   endif
@@ -538,8 +528,6 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
      call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
 
      !Defino variables
-     !call check(nf90_def_var(ncid,"Times",  NF90_INT    , [t_dim_id], var_id))
-     !call check(nf90_put_att(ncid, var_id, "units"      , "seconds from file start date" ))
      call check(nf90_def_var(ncid, 'lat' , NF90_FLOAT   , [x_dim_id,y_dim_id], var_id) )
      call check(nf90_def_var(ncid, 'lon' , NF90_FLOAT   , [x_dim_id,y_dim_id], var_id) )
      call check(nf90_def_var(ncid,"Times",  NF90_CHAR   , [str_dim_id,t_dim_id], var_id))
@@ -547,7 +535,6 @@ subroutine write_output_file(g,YYYY,DDD,MECHANISM)
      call check(nf90_put_att(ncid, var_id, "var_desc"   , "date-time variable"      ))
      !Creo variables:
      do k=1,NMGNSPC !n_scon_spc !
-        !print*,"Especie: ",k,n_scon_spc,trim(mech_spc(k))
         call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
         call check( nf90_put_att(ncid, var_id, "units"      , "g m-2 s-1"               ))
         call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision flux"      ))

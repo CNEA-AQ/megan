@@ -12,42 +12,41 @@ module prep_megan
   private
   public prep
 
+  INTEGER, PARAMETER :: ascii = selected_char_KIND ("ascii")
+  INTEGER, PARAMETER :: ucs4  = selected_char_KIND ('ISO_10646')
 
- INTEGER, PARAMETER :: ascii = selected_char_KIND ("ascii")
- INTEGER, PARAMETER :: ucs4  = selected_char_KIND ('ISO_10646')
+  !Parameters:
+  real, parameter    :: R_EARTH = 6370000.
+  real, parameter    :: PI = 3.141592653589793
+  real, parameter    :: RAD2DEG = 180./PI, DEG2RAD = PI/180.
+  
+  integer, parameter :: ncantype=6, nefs=19, nldfs=4  ! # of canopy types, # of emission factors (19 EF + 4 LDF)
 
- !Parameters:
- real, parameter    :: R_EARTH = 6370000.
- real, parameter    :: PI = 3.141592653589793
- real, parameter    :: RAD2DEG = 180./PI, DEG2RAD = PI/180.
- 
- integer, parameter :: ncantype=6, nefs=19, nldfs=4  ! # of canopy types, # of emission factors (19 EF + 4 LDF)
+  !Objects/Strucs:
+  type proj_type
+     character(16)    :: pName                   !Projection name
+     integer          :: typ                     !Integer code for projection TYPE (2=lcc, 6=stere, 7=merc)
+     real             :: alp,bet,gam,xcent,ycent !proj parameters.
+     real             :: p1,p2,p3,p4             !extra parameters to speed up calculation once p%typ is defined.
+  end type proj_type
 
- !Objects/Strucs:
- type proj_type
-    character(16)    :: pName                   ! Projection name
-    integer          :: typ                     ! Integer code for projection TYPE (2=lcc, 6=stere, 7=merc)
-    real             :: alp,bet,gam,xcent,ycent !proj parameters.
-    real             :: p1,p2,p3,p4             !extra parameters to speed up calculation once p%typ is defined.
- end type proj_type
-
- type grid_type
-     character(12)   :: gName                   !grid-name
-     integer         :: nx,ny,nz                !number of cells in x-y direction (ncols, nrows, nlevs)
-     real            :: dx,dy                   !x-y cell dimension (x_cell, y_cell)
-     real            :: xmin,ymin,xmax,ymax,xc,yc
-     real            :: lonmin,latmin,lonmax,latmax
- end type grid_type
- 
- integer :: iostat,i,j,k
+  type grid_type
+      character(12)   :: gName                   !grid-name
+      integer         :: nx,ny,nz                !number of cells in x-y direction (ncols, nrows, nlevs)
+      real            :: dx,dy                   !x-y cell dimension (x_cell, y_cell)
+      real            :: xmin,ymin,xmax,ymax,xc,yc
+      real            :: lonmin,latmin,lonmax,latmax
+  end type grid_type
+  
+  integer :: iostat,i,j,k
 contains
 
 subroutine prep(griddesc_file, gridname,                                      &
                 ecotypes_file, growtype_file, laiv_file, GtEcoEF_file,        &
                 run_BDSNP, nitro_file, fert_file, climate_file, landtype_file)
  implicit none
- character(200), intent(in)   :: griddesc_file,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
- logical       ,intent(in)    :: run_BDSNP!=.true.
+ character(200), intent(in) :: griddesc_file,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
+ logical       ,intent(in)  :: run_BDSNP
 
  type(proj_type)    :: proj                    !struc that describes projection
  type(grid_type)    :: grid                    !struc that describes regular grid
@@ -73,23 +72,23 @@ subroutine prep(griddesc_file, gridname,                                      &
   enddo
   enddo
  
-print*,"prep static"
   !Static data:
   call prep_static_data(grid,proj,latitude,longitude,growtype_file,ecotypes_file,GtEcoEF_file,climate_file,landtype_file, run_BDSNP)
-                                                                       ! `CTF` (*Canopy Type Fractions*):
-                                                                       ! `EFs` (*Emission Factors*)     : (~19) VOC family, and Canopy Type (6)
-                                                                       ! `LDF` (*Light Dependent EF*)   :  4 VOC families, and Canopy Type (6)
-                                                                       ! `arid`     (BDSNP)
-                                                                       ! `landtype` (BDSNP)
-print*,"prep dynamic"
+       ! `CTF` (*Canopy Type Fractions*):
+       ! `EFs` (*Emission Factors*)     : (~19) VOC family, and Canopy Type (6)
+       ! `LDF` (*Light Dependent EF*)   :  4 VOC families, and Canopy Type (6)
+       ! `arid`     (BDSNP)
+       ! `landtype` (BDSNP)
   !Time/date dependent data:
-  call prep_dynamic_data(grid,proj,latitude,longitude,laiv_file,nitro_file,fert_file,run_BDSNP)     ! time dependent variables
-                                                                       ! `LAI`     monthly.
-                                                                       ! `N_DEP:`  monthly. (BDSNP)
-                                                                       ! `N_FERT:` daily.   (BDSNP)
+  call prep_dynamic_data(grid,proj,latitude,longitude,laiv_file,nitro_file,fert_file,run_BDSNP) 
+       ! `LAI`     monthly.
+       ! `N_DEP:`  monthly. (BDSNP)
+       ! `N_FERT:` daily.   (BDSNP)
+
 print*, "========================================="
 print*, " prep-megan: Completed successfully"
 print*, "========================================="
+
 end subroutine
 
 
@@ -102,7 +101,7 @@ subroutine prep_static_data(g,p,lat,lon,ctf_file, ecotype_file, GtEcoEF_file, cl
   type(proj_type) ,intent(in) :: p
   character(len=*),intent(in) :: ctf_file, ecotype_file, GtEcoEF_file  !input  files
   character(len=*),intent(in) :: climate_file, landtype_file  !input  files
-  character(len=18)           :: outfile='mgn_static_data.nc' !output file
+  character(len=19)           :: outfile='prep_mgn_static.nc' !output file
   logical :: run_BDSNP
   !Coordinates
   real, intent(in)  :: lat(:,:),lon(:,:)
@@ -125,6 +124,7 @@ subroutine prep_static_data(g,p,lat,lon,ctf_file, ecotype_file, GtEcoEF_file, cl
   !LAND (arid, non-arid, landtype)
   real, allocatable    :: LANDGRID(:,:,:)   !LAND buffer
 
+ print '("prep static file: ",A19,"..")',outFile
  !Create File and define dimensions and variables:
  call check(nf90_create(outFile, NF90_CLOBBER, ncid))
     !Define dimensions:
@@ -280,7 +280,7 @@ end subroutine
     implicit none
     type(grid_type) ,intent(in) :: g
     type(proj_type) ,intent(in) :: p
-    character(len=16) :: outfile='mgn_dynamic.nc'
+    character(len=19) :: outfile='prep_mgn_dynamic.nc'
     logical :: run_BDSNP
     !LAIv
     character(len=200),intent(in) :: laiv_file
@@ -300,6 +300,8 @@ end subroutine
     character(len=3):: kkk
     !real :: lat,lon
     integer :: i,j,k
+ 
+    print '("prep dynamic file: ",A19,"..")',outFile
  
      !----
      !LAI: 
@@ -322,33 +324,33 @@ print*,"LAI"
          write(kk,'(I0.2)') k
          LAIv(:,:,k)=interpolate(p,g,inp_file=laiv_file,varname="laiv"//kk, method="bilinear") 
      enddo
-     where (LAIv < 0.0 )
+     where ( LAIv < 0.0 )
              LAIv=0.0
      endwhere
-
+                       
     if (run_BDSNP) then
-    !----
-    !NDEP:
-    allocate( NDEP(g%nx,g%ny,12   ))  
-    do k=1,12
-        write(kk,'(I0.2)') k
-        NDEP(:,:,k)  = interpolate(p,g,nitro_file, varname="nitro"//kk, method="bilinear")
-    enddo
-    where (NDEP < 0.0 )
-       NDEP=0.0
-    endwhere
+       !----
+       !NDEP:
+       allocate( NDEP(g%nx,g%ny,12   ))  
+       do k=1,12
+           write(kk,'(I0.2)') k
+           NDEP(:,:,k)  = interpolate(p,g,nitro_file, varname="nitro"//kk, method="bilinear")
+       enddo
+       where (NDEP < 0.0 )
+          NDEP=0.0
+       endwhere
 
-    !----
-    !NFERT:
-    allocate(NFERT(g%nx,g%ny,365  ))  
-    !Levanto netcdf input files
-    do k=1,365
-        write(kkk,'(I0.3)') k
-        NFERT(:,:,k)  = interpolate(p,g,fert_file, varname="fert"//kkk, method="bilinear")
-    enddo
-    where (NFERT< 0.0 )
-       NFERT=0.0
-    endwhere
+       !----
+       !NFERT:
+       allocate(NFERT(g%nx,g%ny,365  ))  
+       !Levanto netcdf input files
+       do k=1,365
+           write(kkk,'(I0.3)') k
+           NFERT(:,:,k)  = interpolate(p,g,fert_file, varname="fert"//kkk, method="bilinear")
+       enddo
+       where (NFERT< 0.0 )
+          NFERT=0.0
+       endwhere
 
     end if
     !Creo NetCDF file
@@ -373,16 +375,16 @@ print*,"LAI"
        call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
        call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
        if (run_BDSNP) then
-       !NDEP
-       call check(nf90_def_var(ncid, "NDEP", NF90_FLOAT, [x_dim_id,y_dim_id,month_dim_id],var_id))
-       call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
-       call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
-       call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
-       !NFERT
-       call check(nf90_def_var(ncid,"NFERT", NF90_FLOAT, [x_dim_id,y_dim_id, day_dim_id],var_id))
-       call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
-       call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
-       call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
+          !NDEP
+          call check(nf90_def_var(ncid, "NDEP", NF90_FLOAT, [x_dim_id,y_dim_id,month_dim_id],var_id))
+          call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
+          call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
+          call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
+          !NFERT
+          call check(nf90_def_var(ncid,"NFERT", NF90_FLOAT, [x_dim_id,y_dim_id, day_dim_id],var_id))
+          call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
+          call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
+          call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
        endif
        !Global Attributes
        call check(nf90_put_att(ncid, nf90_global,"FILEDESC" , "MEGAN input file"   ))
@@ -399,10 +401,12 @@ print*,"LAI"
       !call check(nf90_inq_varid(ncid,"Times",var_id)); call check(nf90_put_var(ncid, var_id, Times ))
       !LAIv
       call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv/1000.0 ))
-      !NDEP
-      call check(nf90_inq_varid(ncid,"NDEP" ,var_id)); call check(nf90_put_var(ncid, var_id, NDEP        ))
-      !NFERT
-      call check(nf90_inq_varid(ncid,"NFERT",var_id)); call check(nf90_put_var(ncid, var_id, NFERT       ))
+      if (run_BDSNP) then
+        !NDEP
+        call check(nf90_inq_varid(ncid,"NDEP" ,var_id)); call check(nf90_put_var(ncid, var_id, NDEP        ))
+        !NFERT
+        call check(nf90_inq_varid(ncid,"NFERT",var_id)); call check(nf90_put_var(ncid, var_id, NFERT       ))
+      end if
     !Cierro NetCDF outFile
     call check(nf90_close( ncid ))
  end subroutine
