@@ -1,5 +1,7 @@
 module voc_mod
-use netcdf
+   
+   use netcdf
+
    implicit none
    !private
    !public megan_voc
@@ -420,7 +422,7 @@ contains
             GAMP= 0.0
         ELSE
             Alpha  = 0.004
-            C1 = 1.03 !C1 = 0.0468 * EXP(0.0005 * (PPFD24 - PSTD)) * (PPFD24 ** 0.6)
+            C1 = 0.0374 * EXP(0.0005 * (PPFD24 - 240)) * (PPFD24 ** 0.6)
             GAMP= (Alpha * C1 * PPFD1) / SQRT(1.0 + Alpha**2 * PPFD1**2)
         ENDIF
     end function gamp

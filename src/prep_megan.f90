@@ -41,11 +41,11 @@ module prep_megan
   integer :: iostat,i,j,k
 contains
 
-subroutine prep(griddesc_file, gridname,                                      &
-                ecotypes_file, growtype_file, laiv_file, GtEcoEF_file,        &
+subroutine prep(griddesc, gridname,                                          &
+                ecotypes_file, growtype_file, laiv_file, GtEcoEF_file,       &
                 run_BDSNP, nitro_file, fert_file, climate_file, landtype_file)
  implicit none
- character(200), intent(in) :: griddesc_file,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
+ character(200), intent(in) :: griddesc,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
  logical       ,intent(in)  :: run_BDSNP
 
  type(proj_type)    :: proj                    !struc that describes projection
@@ -53,16 +53,8 @@ subroutine prep(griddesc_file, gridname,                                      &
 
  real, allocatable, save  :: longitude(:,:), latitude(:,:) !coordinates
 
- !@namelist/control/griddesc_file,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,landtype_file,nitro_file,fert_file,GtEcoEF_file,run_BDSNP 
- !@!Leo namelist:
- !@read(*,nml=control, iostat=iostat)
- !@if( iostat /= 0 ) then
- !@  write(*,*) 'prepmegan4cmaq: failed to read namelist; error = ',iostat
- !@  stop
- !@end if
-
   !Leo GRIDDESC:
-  call read_GRIDDESC(griddesc_file,gridname, proj, grid)
+  call read_GRIDDESC(griddesc,gridname,proj,grid)
    
   !Compute coordinates lat lon for all grid cells                 
   allocate(latitude(grid%nx,grid%ny));allocate(longitude(grid%nx,grid%ny))
