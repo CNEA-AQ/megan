@@ -16,7 +16,7 @@ program main
    !INCLUDE 'tables/LSM.EXT'           
    !tables to map megan species to chemical mechanism species
    INCLUDE 'tables/SPC_NOCONVER.EXT'
-   INCLUDE 'tables/SPC_CB05.EXT'
+   INCLUDE 'tables/SPC_CB5.EXT'
    INCLUDE 'tables/SPC_CB6.EXT'
    INCLUDE 'tables/SPC_CB6_AE7.EXT'
    INCLUDE 'tables/SPC_RACM2.EXT'        ! new in MEGAN3
@@ -543,15 +543,16 @@ subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
      !call check(nf90_put_att(ncid, var_id, "var_desc"  , "date-time variable"      ))
      call check(nf90_def_var(ncid,"time" ,NF90_INT       , [t_dim_id], var_id  ));
      call check(nf90_put_att(ncid, var_id,"units"        , "seconds since "//current_date//" 00:00:00 UTC" ));  !"%Y-%m-%d %H:%M:%S"
-     call check(nf90_put_att(ncid, var_id,"long_name"    , "time"                                  ));
-     call check(nf90_put_att(ncid, var_id,"axis"         , "T"                                     ));
-     call check(nf90_put_att(ncid, var_id,"calendar"     , "standard"                              ));
-     call check(nf90_put_att(ncid, var_id,"standard_name", "time"                                  ));
+     call check(nf90_put_att(ncid, var_id,"long_name"    , "time"              ));
+     call check(nf90_put_att(ncid, var_id,"axis"         , "T"                 ));
+     call check(nf90_put_att(ncid, var_id,"calendar"     , "standard"          ));
+     call check(nf90_put_att(ncid, var_id,"standard_name", "time"              ));
 
      !Creo variables:
      do k=1,NMGNSPC !n_scon_spc !
         call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-        call check( nf90_put_att(ncid, var_id, "units"      , "g m-2 s-1"               ))
+        call check( nf90_put_att(ncid, var_id, "units"      , "mole m-2 s-1"       ))
+        !call check( nf90_put_att(ncid, var_id, "units"      , "mole s-1"          ))   !if multiplied by cell_area
         call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision flux"      ))
      end do
    call check(nf90_enddef(ncid))   !End NetCDF define mode
@@ -679,7 +680,7 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
          tmper(:,:,nmpsp,t) = non_dim_emis(:,:,nmpmg,t) * efmaps(:,:,nmpmg)  * effs_all(s)
       enddo
     enddo ! end species loop
-     tmper = tmper * nmol2mol
+    tmper = tmper * nmol2mol
 
     !3) Conversion from speciated species to MECHANISM species
      ! lumping to MECHANISM species
@@ -687,7 +688,8 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
        nmpsp = spmh_map(s)         ! Mapping value for SPCA
        nmpmc = mech_map(s)         ! Mapping value for MECHANISM
        if ( nmpmc .ne. 999 ) then
-          emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s))
+          emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s))                 ![mole/m2.s]
+          !emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s)) !* cell_area   ![mole/s]
        endif
      enddo ! End species loop
 end subroutine mgn2mech

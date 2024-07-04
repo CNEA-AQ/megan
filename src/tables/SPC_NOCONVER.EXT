@@ -22,7 +22,7 @@
       CHARACTER*16   MGN_SPC(N_MGN_SPC)
 
       DATA  MGN_SPC(  1)  / 'ISOP            '/      ! isoprene
-      DATA  MGN_SPC(  2)  / 'MBO             '/      ! MBO
+      DATA  MGN_SPC(  2)  / 'MBO             '/      ! MBO (2-metil-3-buten-2-ol)
       DATA  MGN_SPC(  3)  / 'MT_PINE         '/      ! monoterpenes: pines (alpha and beta)
       DATA  MGN_SPC(  4)  / 'MT_ACYC         '/      ! monoterpenes: acyclic, 3 = (e.g., myrcene, ocimenes)
       DATA  MGN_SPC(  5)  / 'MT_CAMP         '/      ! monoterpenes: carene, camphene, others
