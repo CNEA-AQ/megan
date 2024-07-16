@@ -52,6 +52,7 @@ subroutine prep(griddesc, gridname,                                          &
  type(grid_type)    :: grid                    !struc that describes regular grid
 
  real, allocatable, save  :: longitude(:,:), latitude(:,:) !coordinates
+ real, allocatable, save  :: cell_area(:,:)                !
 
   !Leo GRIDDESC:
   call read_GRIDDESC(griddesc,gridname,proj,grid)
@@ -63,16 +64,24 @@ subroutine prep(griddesc, gridname,                                          &
      call xy2ll(proj,grid%xmin+grid%dx*i,grid%ymin+grid%dy*j,longitude(i,j),latitude(i,j)) 
   enddo
   enddo
- 
+  !Compute grid-cell area:
+  allocate(cell_area(grid%nx,grid%ny))
+  if ( proj%typ == 1 ) then
+    !differential area on a sphere
+    cell_area=R_EARTH * R_EARTH * COS( DEG2RAD * latitude ) * DEG2RAD * grid%dx *  DEG2RAD * grid%dy !dA = R² * cos( lat ) * dlat * dlon
+  else 
+   cell_area=grid%dx*grid%dy                     ! area [m2]
+  end if
+
   !Static data:
-  call prep_static_data(grid,proj,latitude,longitude,growtype_file,ecotypes_file,GtEcoEF_file,climate_file,landtype_file, run_BDSNP)
+  call prep_static_data(grid,proj,latitude,longitude,cell_area,growtype_file,ecotypes_file,GtEcoEF_file,climate_file,landtype_file, run_BDSNP)
        ! `CTF` (*Canopy Type Fractions*):
        ! `EFs` (*Emission Factors*)     : (~19) VOC family, and Canopy Type (6)
        ! `LDF` (*Light Dependent EF*)   :  4 VOC families, and Canopy Type (6)
        ! `arid`     (BDSNP)
        ! `landtype` (BDSNP)
   !Time/date dependent data:
-  call prep_dynamic_data(grid,proj,latitude,longitude,laiv_file,nitro_file,fert_file,run_BDSNP) 
+  call prep_dynamic_data(grid,proj,latitude,longitude,cell_area,laiv_file,nitro_file,fert_file,run_BDSNP) 
        ! `LAI`     monthly.
        ! `N_DEP:`  monthly. (BDSNP)
        ! `N_FERT:` daily.   (BDSNP)
@@ -87,7 +96,7 @@ end subroutine
  !----------------------------------
  !  STATIC  DATA:
  !---------------------------------
-subroutine prep_static_data(g,p,lat,lon,ctf_file, ecotype_file, GtEcoEF_file, climate_file,landtype_file, run_BDSNP)
+subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_file, climate_file,landtype_file, run_BDSNP)
   implicit none
   type(grid_type) ,intent(in) :: g
   type(proj_type) ,intent(in) :: p
@@ -95,8 +104,8 @@ subroutine prep_static_data(g,p,lat,lon,ctf_file, ecotype_file, GtEcoEF_file, cl
   character(len=*),intent(in) :: climate_file, landtype_file  !input  files
   character(len=19)           :: outfile='prep_mgn_static.nc' !output file
   logical :: run_BDSNP
-  !Coordinates
-  real, intent(in)  :: lat(:,:),lon(:,:)
+  !Coordinates & area
+  real, intent(in)  :: lat(:,:),lon(:,:), area(:,:)
   !netcdf indices:
   integer :: ncid,xid,yid,zid,vid,tid,var_id
   integer :: x_dim_id,y_dim_id,cty_dim_id,ef_dim_id,ldf_dim_id,i,j,k
@@ -129,6 +138,12 @@ subroutine prep_static_data(g,p,lat,lon,ctf_file, ecotype_file, GtEcoEF_file, cl
     ! Coordinates:
     call check(nf90_def_var(ncid, "lon"    , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
     call check(nf90_def_var(ncid, "lat"    , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
+    ! AREA:
+    call check(nf90_def_var(ncid, "cell_area", NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
+    call check(nf90_put_att(ncid, var_id,"long_name", "Cell_area"                     ))
+    call check(nf90_put_att(ncid, var_id,"units"    , "m2"                            ))
+    call check(nf90_put_att(ncid, var_id,"var_desc" , "horizontal area of a gridcell" ))
+
     ! CTF:
     call check(nf90_def_var(ncid, "CTF" , NF90_FLOAT, [x_dim_id,y_dim_id,cty_dim_id],var_id))
     call check(nf90_put_att(ncid, var_id,"long_name", "CANOPY_TYPE_FRACTION"               ))
@@ -166,10 +181,11 @@ subroutine prep_static_data(g,p,lat,lon,ctf_file, ecotype_file, GtEcoEF_file, cl
  !Get and write variables:
   call check(nf90_open(outFile, nf90_write, ncid       ))
      !--------
-     !Coordinates
+     !Coordinates:
      call check(nf90_inq_varid(ncid,"lon" ,var_id)); call check(nf90_put_var(ncid, var_id, lon ) )
      call check(nf90_inq_varid(ncid,"lat" ,var_id)); call check(nf90_put_var(ncid, var_id, lat ) )
-
+     !Area:
+     call check(nf90_inq_varid(ncid,"cell_area",var_id)); call check(nf90_put_var(ncid, var_id, area ) )
      !--------
      ! CTF:
 print*,"CTF"
@@ -268,7 +284,7 @@ end subroutine
  !----------------------------------
  !  DYNAMIC DATA:
  !---------------------------------
- subroutine prep_dynamic_data(g,p,lat,lon,laiv_file,nitro_file, fert_file,run_BDSNP)
+ subroutine prep_dynamic_data(g,p,lat,lon,area,laiv_file,nitro_file, fert_file,run_BDSNP)
     implicit none
     type(grid_type) ,intent(in) :: g
     type(proj_type) ,intent(in) :: p
@@ -284,7 +300,7 @@ end subroutine
     character(len=200),intent(in) :: fert_file
     real, allocatable :: NFERT(:,:,:)
     !Coordinates
-    real, intent(in)  :: lat(:,:),lon(:,:)
+    real, intent(in)  :: lat(:,:),lon(:,:), area(:,:)
     integer ::var_id,ncid,x_dim_id,y_dim_id,date_dim_id,day_dim_id,month_dim_id
     integer :: nvars
     character(len=10):: temporal_avg  !flag on LAIv global file that specifies temporal average of data
@@ -358,6 +374,7 @@ print*,"LAI"
        ! Coordinates:
        call check(nf90_def_var(ncid, "lon" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
        call check(nf90_def_var(ncid, "lat" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
+       call check(nf90_def_var(ncid, "cell_area" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))  !cell area
        !!Times
        !call check(nf90_def_var(ncid, "Times",NF90_INT,   [x_dim_id,y_dim_id,date_dim_id], var_id))
        !call check(nf90_put_att(ncid, var_id,"units"    , "seconds since 1970-1-1"   ))
@@ -389,6 +406,7 @@ print*,"LAI"
       !!Coordinates
       call check(nf90_inq_varid(ncid,"lon"  ,var_id)); call check(nf90_put_var(ncid, var_id, lon ) )
       call check(nf90_inq_varid(ncid,"lat"  ,var_id)); call check(nf90_put_var(ncid, var_id, lat ) )    
+      call check(nf90_inq_varid(ncid,"cell_area", var_id)); call check(nf90_put_var(ncid, var_id, area ) )    !area
       !!Times:
       !call check(nf90_inq_varid(ncid,"Times",var_id)); call check(nf90_put_var(ncid, var_id, Times ))
       !LAIv
@@ -498,7 +516,10 @@ end function
     implicit none
     type(proj_type) ,intent(inout) :: p
 
-    if ( p%typ == 2 ) then       !lambert conformal conic:        
+    if ( p%typ == 1 ) then    !latlon                          
+       print*, "Warning: Latlon coordinate system! (Not tested)."
+
+    else if ( p%typ == 2 ) then       !lambert conformal conic:        
        if ( ABS(p%alp - p%bet) > 0.1 ) then  !secant proj case
           p%p2=     LOG( COS(p%alp           *deg2rad )/ COS(p%bet           *deg2rad)   )
           p%p2=p%p2/LOG( TAN((45.0+0.5*p%bet)*deg2rad )/ TAN((45.0+0.5*p%alp)*deg2rad)   ) !n
@@ -514,8 +535,6 @@ end function
     else if ( p%typ == 7 ) then  !equatorial mercator
        p%p1=COS(p%alp*deg2rad)   !k0
 
-    else if ( p%typ == 1 ) then
-       print*, "sistema de coordenadas latlon!"
     else
         print*, "codigo de proyección invalido:",p%typ,"."; stop
     end if
@@ -565,14 +584,14 @@ end function
      real, intent(in)   :: x,y
      real, intent(inout):: lon,lat
  
-     if      ( p%typ == 2 ) then  !Lambert Conformal Conic:
+     if      ( p%typ == 1 ) then  !lat lon                 
+        lon=x;  lat=y
+     else if ( p%typ == 2 ) then  !Lambert Conformal Conic:
         call xy2ll_lcc(p,x,y,lon,lat)
      else if ( p%typ == 6 ) then  !polar secant stereographic
         call xy2ll_stere(p,x,y,lat,lon)
      else if ( p%typ == 7 ) then  !equatorial mercator
         call xy2ll_merc(p,x,y,lon,lat)
-     else if ( p%typ == 1 ) then  !latlon
-        lon=x;lat=y               !no transformation needed       
      else
         print*, "codigo de proyección invalido:",p%typ,"."; stop
      end if
@@ -583,14 +602,14 @@ end function
        real, intent(in):: lon,lat
        real, intent(inout)   :: x,y
  
-       if      ( p%typ == 2 ) then  !Lambert Conformal Conic:
+       if ( p%typ == 1 ) then        !latlon
+           x=lon;y=lat               !no transformation needed
+       else if ( p%typ == 2 ) then  !Lambert Conformal Conic:
           call ll2xy_lcc(p,lon,lat,x,y)
        else if ( p%typ == 6 ) then  !Polar Secant Stereographic
           call ll2xy_stere(p,lon,lat,x,y)
        else if ( p%typ == 7 ) then  !Equatorial Mercator
           call ll2xy_merc(p,lon,lat,x,y)
-       else if ( p%typ == 1 ) then  !latlon
-          x=lon;y=lat               !no transformation needed
        else
           print*, "codigo de proyección invalido:",p%typ,"."; stop
        end if                             
