@@ -152,7 +152,8 @@ end if
 
          !generally writes one file per day:
          if ( current_day /= "99" ) then
-            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)   !convert to mechanism species before write the output
+            !call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)   !convert to mechanism species before write the output
+            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all,cell_area)   !convert to mechanism species before write the output
             !call write_output_file(grid,current_year,current_jday,MECHANISM) !write output file
             call write_output_file(grid,current_year,current_month,current_day,MECHANISM) !write output file
             if ( current_date_s == end_date_s ) stop 'MEGAN finished succesfully.';
@@ -558,8 +559,8 @@ subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
      !Creo variables:
      do k=1,NMGNSPC !n_scon_spc !
         call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-        call check( nf90_put_att(ncid, var_id, "units"      , "mole m-2 s-1"       ))
-        !call check( nf90_put_att(ncid, var_id, "units"      , "mole s-1"          ))   !if multiplied by cell_area
+        !call check( nf90_put_att(ncid, var_id, "units"      , "mole m-2 s-1"       ))
+        call check( nf90_put_att(ncid, var_id, "units"      , "mole s-1"          ))   !if multiplied by cell_area
         call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision flux"      ))
      end do
    call check(nf90_enddef(ncid))   !End NetCDF define mode
@@ -666,12 +667,13 @@ subroutine select_megan_mechanism(mechanism)
 
 end subroutine select_megan_mechanism
 
-subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
+subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis,area)
     implicit none
     integer, intent(in) :: ncols,nrows,ntimes
     real, intent(in)    :: non_dim_emis(ncols,nrows,nclass,ntimes)
     real, intent(inout) :: emis(ncols,nrows,n_spca_spc,ntimes)
     real, intent(in)    :: efmaps(ncols,nrows,19) !only 19
+    real, intent(in)    :: area(ncols,nrows) !only 19
     !mgn2mech variables:
     integer :: nmpmg,nmpsp,nmpmc,s,t
     real    :: tmper(ncols, nrows, n_spca_spc,ntimes)       ! Temp emission buffer
@@ -685,7 +687,8 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
       nmpsp = spca_map(s) !megan specie    [1~200]
 
       do t=1,ntimes
-         tmper(:,:,nmpsp,t) = non_dim_emis(:,:,nmpmg,t) * efmaps(:,:,nmpmg)  * effs_all(s)
+         !tmper(:,:,nmpsp,t) = non_dim_emis(:,:,nmpmg,t) * efmaps(:,:,nmpmg)  * effs_all(s)              ! [mole/m2.s]
+         tmper(:,:,nmpsp,t) = non_dim_emis(:,:,nmpmg,t) * efmaps(:,:,nmpmg)  * effs_all(s) * area(:,:)   ! [mole/s]
       enddo
     enddo ! end species loop
     tmper = tmper * nmol2mol
@@ -696,8 +699,7 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis)
        nmpsp = spmh_map(s)         ! Mapping value for SPCA
        nmpmc = mech_map(s)         ! Mapping value for MECHANISM
        if ( nmpmc .ne. 999 ) then
-          emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s))                 ![mole/m2.s]
-          !emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s)) !* cell_area   ![mole/s]
+          emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s)) 
        endif
      enddo ! End species loop
 end subroutine mgn2mech
