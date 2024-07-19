@@ -2,7 +2,6 @@
 ! programed by: Ramiro A. Espada. April 2023.
 ! Based on Prep_code &  MEGEFP32 (UCI-BAI-MEGAN)
 !---------------------------------------------------------------
-!program prepmegan
 module prep_megan
 
   use netcdf
@@ -20,20 +19,20 @@ module prep_megan
   real, parameter    :: PI = 3.141592653589793
   real, parameter    :: RAD2DEG = 180./PI, DEG2RAD = PI/180.
   
-  integer, parameter :: ncantype=6, nefs=19, nldfs=4  ! # of canopy types, # of emission factors (19 EF + 4 LDF)
+  integer, parameter :: ncantype=6, nefs=19, nldfs=4              ! # of canopy types, # of emission factors (19 EF + 4 LDF)
 
   !Objects/Strucs:
   type proj_type
-     character(16)    :: pName                   !Projection name
-     integer          :: typ                     !Integer code for projection TYPE (2=lcc, 6=stere, 7=merc)
-     real             :: alp,bet,gam,xcent,ycent !proj parameters.
-     real             :: p1,p2,p3,p4             !extra parameters to speed up calculation once p%typ is defined.
+     character(16)    :: pName                                    !Projection name
+     integer          :: typ                                      !Integer code for projection TYPE (2=lcc, 6=stere, 7=merc)
+     real             :: alp,bet,gam,xcent,ycent                  !proj parameters.
+     real             :: p1,p2,p3,p4                              !extra parameters to speed up calculation once p%typ is defined.
   end type proj_type
 
   type grid_type
-      character(12)   :: gName                   !grid-name
-      integer         :: nx,ny,nz                !number of cells in x-y direction (ncols, nrows, nlevs)
-      real            :: dx,dy                   !x-y cell dimension (x_cell, y_cell)
+      character(12)   :: gName                                    !grid-name
+      integer         :: nx,ny,nz                                 !number of cells in x-y direction (ncols, nrows, nlevs)
+      real            :: dx,dy                                    !x-y cell dimension (x_cell, y_cell)
       real            :: xmin,ymin,xmax,ymax,xc,yc
       real            :: lonmin,latmin,lonmax,latmax
   end type grid_type
@@ -44,15 +43,15 @@ contains
 subroutine prep(griddesc, gridname,                                          &
                 ecotypes_file, growtype_file, laiv_file, GtEcoEF_file,       &
                 run_BDSNP, nitro_file, fert_file, climate_file, landtype_file)
- implicit none
- character(200), intent(in) :: griddesc,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
- logical       ,intent(in)  :: run_BDSNP
+  implicit none
+  character(200), intent(in) :: griddesc,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
+  logical       ,intent(in)  :: run_BDSNP
 
- type(proj_type)    :: proj                    !struc that describes projection
- type(grid_type)    :: grid                    !struc that describes regular grid
+  type(proj_type)    :: proj                                !struc that describes projection
+  type(grid_type)    :: grid                                !struc that describes regular grid
 
- real, allocatable, save  :: longitude(:,:), latitude(:,:) !coordinates
- real, allocatable, save  :: cell_area(:,:)                !
+  real, allocatable, save  :: longitude(:,:), latitude(:,:) !coordinates
+  real, allocatable, save  :: cell_area(:,:)                !grid cell area
 
   !Leo GRIDDESC:
   call read_GRIDDESC(griddesc,gridname,proj,grid)
@@ -67,10 +66,9 @@ subroutine prep(griddesc, gridname,                                          &
   !Compute grid-cell area:
   allocate(cell_area(grid%nx,grid%ny))
   if ( proj%typ == 1 ) then
-    !differential area on a sphere
     cell_area=R_EARTH * R_EARTH * COS( DEG2RAD * latitude ) * DEG2RAD * grid%dx *  DEG2RAD * grid%dy !dA = R² * cos( lat ) * dlat * dlon
   else 
-   cell_area=grid%dx*grid%dy                     ! area [m2]
+    cell_area=grid%dx*grid%dy                     ! area [m2]
   end if
 
   !Static data:
@@ -78,20 +76,20 @@ subroutine prep(griddesc, gridname,                                          &
        ! `CTF` (*Canopy Type Fractions*):
        ! `EFs` (*Emission Factors*)     : (~19) VOC family, and Canopy Type (6)
        ! `LDF` (*Light Dependent EF*)   :  4 VOC families, and Canopy Type (6)
-       ! `arid`     (BDSNP)
-       ! `landtype` (BDSNP)
-  !Time/date dependent data:
-  call prep_dynamic_data(grid,proj,latitude,longitude,cell_area,laiv_file,nitro_file,fert_file,run_BDSNP) 
-       ! `LAI`     monthly.
-       ! `N_DEP:`  monthly. (BDSNP)
-       ! `N_FERT:` daily.   (BDSNP)
+       ! `arid`     (BDSNP): arid soils mask
+       ! `landtype` (BDSNP): land type classification
 
-print*, "========================================="
-print*, " prep-megan: Completed successfully"
-print*, "========================================="
+  !Time/date dependent data:
+  call prep_dynamic_data(grid,proj,latitude,longitude,laiv_file,nitro_file,fert_file,run_BDSNP) 
+       ! `LAI`     monthly.         : Leaf Area Index
+       ! `N_DEP:`  monthly. (BDSNP) : Nitrogen deposition   flux
+       ! `N_FERT:` daily.   (BDSNP) : Nitrogen feritization flux
+
+   print*, "========================================="
+   print*, " prep-megan: Completed successfully"
+   print*, "========================================="
 
 end subroutine
-
 
  !----------------------------------
  !  STATIC  DATA:
@@ -112,13 +110,13 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
   !CTF: 
   real, allocatable :: CTF(:,:,:)          !CTF buffer
   !EF & LDF:
-  integer, allocatable :: ECOTYPE(:,:)      !este puede ser int tamb
+  integer, allocatable :: ECOTYPE(:,:)      !Ecotype classification
   real   , allocatable :: GTYP(:,:,:)       !CTF (crop, tree, grass, shrub)
   integer              :: EcoID             !EcoID read in table file
   character(len=6)     :: GtID              !GtID  read in table file
   real                 :: EF(NEFS+NLDFS)    !EFs   read in table file 
   real, allocatable    :: OUTGRID(:,:,:)    !EF and LDF buffer
-  character(len=6)     :: CTF_LIST(4) ! crop, tree, grass, shrub
+  character(len=6)     :: CTF_LIST(4)       ![crop, tree, grass, shrub]
   
   !real, allocatable :: OUTGRID(:,:,:,:)   !test v3.3
   !character(len=6) :: CTF_LIST(7) ! crop, tree, grass, shrub
@@ -160,17 +158,17 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
     call check(nf90_put_att(ncid, var_id,"units"    , "nanomol m-2 s-1"                    )) !Q: Are this the correct units? Are the same for LDF?
     call check(nf90_put_att(ncid, var_id,"var_desc" , "Ligth Dependent Emissions Factors: LDF01,...LDF04" ))
     if (run_BDSNP) then
-    print*,"Building BDSNP_ARID, BDSNP_NONARID & BDSNP_LANDTYPE ..."
-    ! LANDTYPE, ARID, NONARID (BDSNP)
-    call check(nf90_def_var(ncid, "arid", NF90_INT  , [x_dim_id,y_dim_id],var_id))
-    call check(nf90_put_att(ncid, var_id,"long_name", "arid"                   ))
-    call check(nf90_put_att(ncid, var_id,"units"    , "1 or 0"                 ))
-    call check(nf90_put_att(ncid, var_id,"var_desc" , "Arid soils"             ))
+       print*,"Building BDSNP_ARID, BDSNP_NONARID & BDSNP_LANDTYPE ..."
+       ! LANDTYPE, ARID, NONARID (BDSNP)
+       call check(nf90_def_var(ncid, "arid", NF90_INT  , [x_dim_id,y_dim_id],var_id))
+       call check(nf90_put_att(ncid, var_id,"long_name", "arid"                   ))
+       call check(nf90_put_att(ncid, var_id,"units"    , "1 or 0"                 ))
+       call check(nf90_put_att(ncid, var_id,"var_desc" , "Arid soil mask"         ))
 
-    call check(nf90_def_var(ncid,"landtype",NF90_INT, [x_dim_id,y_dim_id],var_id))
-    call check(nf90_put_att(ncid, var_id,"long_name", "landtype"                ))
-    call check(nf90_put_att(ncid, var_id,"units"    , "nondimension"            ))
-    call check(nf90_put_att(ncid, var_id,"var_desc" , "Canopy Type Fraction"    ))
+       call check(nf90_def_var(ncid,"landtype",NF90_INT, [x_dim_id,y_dim_id],var_id))
+       call check(nf90_put_att(ncid, var_id,"long_name", "landtype"                ))
+       call check(nf90_put_att(ncid, var_id,"units"    , "nondimension"            ))
+       call check(nf90_put_att(ncid, var_id,"var_desc" , "Soil type calssification"))
     endif
     !Global Attributes
     call check(nf90_put_att(ncid, nf90_global,"FILEDESC" , "MEGAN input file"   ))
@@ -188,7 +186,7 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
      call check(nf90_inq_varid(ncid,"cell_area",var_id)); call check(nf90_put_var(ncid, var_id, area ) )
      !--------
      ! CTF:
-print*,"CTF"
+     print*,"CTF"
      allocate(CTF(g%nx,g%ny,ncantype+1))  ! allocate(CTF(g%nx,g%ny,nvars))  
 
      CTF(:,:,1)=interpolate(p,g,inp_file=ctf_file, varname="nl_tree"  , method="bilinear")
@@ -207,11 +205,12 @@ print*,"CTF"
      CTF(:,:,2)=CTF(:,:,7) * (    CTF(:,:,2)/100.0)
 
      !WRITE CTF:
-     call check(nf90_inq_varid(ncid,"CTF",var_id)); call check(nf90_put_var(ncid, var_id, CTF(:,:,1:6)  ))        
+     CTF=CTF*0.01 ! % to fraction.
+     call check(nf90_inq_varid(ncid,"CTF",var_id)); call check(nf90_put_var(ncid, var_id, CTF(:,:,1:6) ))
 
      !--------
      !EFs & LDF
-print*,"EFS & LDF"
+     print*,"EFS & LDF"
      allocate( ECOTYPE(g%nx, g%ny   ))   !ecotype
      allocate(    GTYP(g%nx, g%ny,4 ))   !growthtype fracs
 
@@ -265,15 +264,15 @@ print*,"EFS & LDF"
 
    !LAND FIELDS (BDSNP)
    if (run_BDSNP) then
-print*,"BDSNP (LAND)"    
-    allocate(LANDGRID(g%nx,g%ny,ncantype+1))  ! allocate(CTF(g%nx,g%ny,nvars))  
+   print*,"BDSNP (LAND)"    
+     allocate(LANDGRID(g%nx,g%ny,ncantype+1))  ! allocate(CTF(g%nx,g%ny,nvars))  
      LANDGRID(:,:,1) = interpolate(p,g,climate_file , varname="arid"    , method="mode")
      LANDGRID(:,:,2) = 1  
      LANDGRID(:,:,2) = interpolate(p,g,landtype_file, varname="landtype", method="mode")
 
-    !WRITE LAND FIELDS:
-    call check(nf90_inq_varid(ncid,"arid"    ,var_id)); call check(nf90_put_var(ncid, var_id, LANDGRID(:,:,1) ))        
-    call check(nf90_inq_varid(ncid,"landtype",var_id)); call check(nf90_put_var(ncid, var_id, LANDGRID(:,:,2) ))        
+     !WRITE LAND FIELDS:
+     call check(nf90_inq_varid(ncid,"arid"    ,var_id)); call check(nf90_put_var(ncid, var_id, LANDGRID(:,:,1) ))        
+     call check(nf90_inq_varid(ncid,"landtype",var_id)); call check(nf90_put_var(ncid, var_id, LANDGRID(:,:,2) ))        
    end if
 
  !Cierro NetCDF outFile
@@ -284,7 +283,7 @@ end subroutine
  !----------------------------------
  !  DYNAMIC DATA:
  !---------------------------------
- subroutine prep_dynamic_data(g,p,lat,lon,area,laiv_file,nitro_file, fert_file,run_BDSNP)
+ subroutine prep_dynamic_data(g,p,lat,lon,laiv_file,nitro_file, fert_file,run_BDSNP)
     implicit none
     type(grid_type) ,intent(in) :: g
     type(proj_type) ,intent(in) :: p
@@ -300,7 +299,7 @@ end subroutine
     character(len=200),intent(in) :: fert_file
     real, allocatable :: NFERT(:,:,:)
     !Coordinates
-    real, intent(in)  :: lat(:,:),lon(:,:), area(:,:)
+    real, intent(in)  :: lat(:,:),lon(:,:)
     integer ::var_id,ncid,x_dim_id,y_dim_id,date_dim_id,day_dim_id,month_dim_id
     integer :: nvars
     character(len=10):: temporal_avg  !flag on LAIv global file that specifies temporal average of data
@@ -313,7 +312,7 @@ end subroutine
  
      !----
      !LAI: 
-print*,"LAI"
+     print*,"LAI"
      !
      !Idea for implementing 8-day LAIv: just read global_var (NVARS) and depending of this read & write the output.
      call check(nf90_open(laiv_file,nf90_nowrite, ncid) )
@@ -375,9 +374,6 @@ print*,"LAI"
        call check(nf90_def_var(ncid, "lon" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
        call check(nf90_def_var(ncid, "lat" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))
        call check(nf90_def_var(ncid, "cell_area" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))  !cell area
-       !!Times
-       !call check(nf90_def_var(ncid, "Times",NF90_INT,   [x_dim_id,y_dim_id,date_dim_id], var_id))
-       !call check(nf90_put_att(ncid, var_id,"units"    , "seconds since 1970-1-1"   ))
        !LAI
        call check(nf90_def_var(ncid, "LAI" , NF90_FLOAT, [x_dim_id,y_dim_id,date_dim_id],var_id))
        call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
@@ -386,14 +382,14 @@ print*,"LAI"
        if (run_BDSNP) then
           !NDEP
           call check(nf90_def_var(ncid, "NDEP", NF90_FLOAT, [x_dim_id,y_dim_id,month_dim_id],var_id))
-          call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
-          call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
-          call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
+          call check(nf90_put_att(ncid, var_id,"long_name", "NDEP"            ))
+          call check(nf90_put_att(ncid, var_id,"units"    , "???"             ))
+          call check(nf90_put_att(ncid, var_id,"var_desc" , "N Deposition   " ))
           !NFERT
           call check(nf90_def_var(ncid,"NFERT", NF90_FLOAT, [x_dim_id,y_dim_id, day_dim_id],var_id))
-          call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
-          call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
-          call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
+          call check(nf90_put_att(ncid, var_id,"long_name", "NFERT"           ))
+          call check(nf90_put_att(ncid, var_id,"units"    , "???"             ))
+          call check(nf90_put_att(ncid, var_id,"var_desc" , "N Fertilization" ))
        endif
        !Global Attributes
        call check(nf90_put_att(ncid, nf90_global,"FILEDESC" , "MEGAN input file"   ))
@@ -406,21 +402,15 @@ print*,"LAI"
       !!Coordinates
       call check(nf90_inq_varid(ncid,"lon"  ,var_id)); call check(nf90_put_var(ncid, var_id, lon ) )
       call check(nf90_inq_varid(ncid,"lat"  ,var_id)); call check(nf90_put_var(ncid, var_id, lat ) )    
-      call check(nf90_inq_varid(ncid,"cell_area", var_id)); call check(nf90_put_var(ncid, var_id, area ) )    !area
-      !!Times:
-      !call check(nf90_inq_varid(ncid,"Times",var_id)); call check(nf90_put_var(ncid, var_id, Times ))
       !LAIv
       call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv/1000.0 ))
       if (run_BDSNP) then
-        !NDEP
         call check(nf90_inq_varid(ncid,"NDEP" ,var_id)); call check(nf90_put_var(ncid, var_id, NDEP        ))
-        !NFERT
         call check(nf90_inq_varid(ncid,"NFERT",var_id)); call check(nf90_put_var(ncid, var_id, NFERT       ))
       end if
     !Cierro NetCDF outFile
     call check(nf90_close( ncid ))
  end subroutine
-
 
 !***********************************************************************
 !UTILS *****************************************************************
@@ -819,8 +809,7 @@ function interpolate(p,g,inp_file,varname,method)       result(img2)
       enddo
   endif
   !INTERPOLATION:  
-  if ( methodId == 3 ) then
-  !! Bilineal Interp:
+  if ( methodId == 3 ) then  !! Bilineal Interp:
      !print*,"Bilinear interpolation. ",scale_x,scale_y
      do i=1,g%nx
         do j=1,g%ny
@@ -925,9 +914,6 @@ subroutine get_Cropped_Img(p,g,inp_file,varname,img,GC)
     call check( nf90_get_var(ncid, varid , img, start=[is,js],count=[GC%nx,GC%ny] ) )
     !--------------------------------------------------------     
   call check(nf90_close(ncid))
-  !print*,"       File, minval, maxval",trim(inp_file),minval(img),maxval(img) !debug
-
 end subroutine
 
 end module 
-!end program

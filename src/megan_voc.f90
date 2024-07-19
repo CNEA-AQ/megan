@@ -27,7 +27,7 @@ contains
 
 subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,hour
              ncols,nrows,lat,long,                         & !dimensions, latitude, longitude coordinates
-             temp,rad,wind,pres,qv,                        & !air temperature [ºK], 
+             temp,rad,wind,pres,qv,                        & !air temperature [ºK], Photosynthetic Photon Flux Density [W m-2], Wind speed [m/s], Pressure [Pa], Humidity [m3/m3]
              laip, laic,                                   &
              ctf, efmaps, ldf_in,                          & !lai,emis factors, light emis factors
              lsm,soil_type,soil_moisture,                  & !land surface model, soil type, soil_moisture

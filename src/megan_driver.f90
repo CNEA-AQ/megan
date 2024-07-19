@@ -57,16 +57,17 @@ program main
    real,    allocatable, dimension(:,:)     :: tmp,ppfd,u10,v10,pre,hum,rain !(x,y,t) <- from wrfout
    real,    allocatable, dimension(:,:)     :: smois,stemp                   !(x,y,t) <- from wrfout
    integer, allocatable, dimension(:,:)     :: stype                         !(x,y)   <- from wrfout
-   real   , allocatable, dimension(:,:)     :: cell_area!,lon,lat            !(x,y)   <- from prep_megan
+   real   , allocatable, dimension(:,:)     :: cell_area                     !(x,y)   <- from prep_megan
    integer, allocatable, dimension(:,:)     :: arid,non_arid,landtype        !(x,y)   <- from prep_megan
    real,    allocatable, dimension(:,:,:)   :: ctf,ef,ldf_in                 !(x,y,*) <- from prep_megan
    real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) <- from prep_megan
 
    !intermediate vars:
    logical :: fileExists=.false.
-   character(250)                    :: met_file                                  !path to current met file beeing reading
-   real, allocatable, dimension(:,:) :: wind                                      !(x,y,t) windspeed (from wrfout)
-   real, allocatable, dimension(:,:) :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
+   character(250)                       :: met_file                                  !path to current met file beeing reading
+   real, allocatable, dimension(:,:)    :: wind                                      !(x,y,t) windspeed (from wrfout)
+   real, allocatable, dimension(:,:)    :: tmp_min,tmp_max,wind_max,tmp_avg,ppfd_avg !(x,y) daily meteo vars
+   !real, allocatable, dimension(:,:,24) :: tmp24, rad24, wnd24                       !(x,y,24) last 24 hs vars values (temp, ppfd & wind)
 
    !output vars:
    real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all          !(x,y,nclass,t)
@@ -139,41 +140,37 @@ end if
    current_date_s = atoi( date(start_date, "%s"))
        end_date_s = atoi( date(  end_date, "%s"))
    !n_hours=floor(real((end_date_s-current_date_s)/3600))
-   do while (current_date_s <= end_date_s)
+   do while (current_date_s <= end_date_s)                                                !temporal loop
       current_date=date("@"//itoa(current_date_s),"%Y %m %d %j %H")
       read(current_date ,*) yyyy,mm,dd,ddd,hh                      !
-      current_date=YYYY//"-"//MM//"-"//DD//" "//HH//":00:00"       !get current date in format: %Y-%m-%d %H:%M:%S
+      current_date=YYYY//"-"//MM//"-"//DD//" "//HH//":00:00"                              !get current date in format: %Y-%m-%d %H:%M:%S
       print*,"  Current date: ",current_date
 
-      met_file=update_filename(met_files,current_date)             !update meteo file name/path according to current date-time
+      met_file=update_filename(met_files,current_date)                                    !update meteo file name/path according to current date-time
 
-      !when new day begins:
-      if ( current_day /= DD .or. current_date_s == end_date_s ) then
+      if ( current_day /= DD .or. current_date_s == end_date_s ) then                     !when new day begins:
 
-         !generally writes one file per day:
          if ( current_day /= "99" ) then
-            !call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)   !convert to mechanism species before write the output
-            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all,cell_area)   !convert to mechanism species before write the output
-            !call write_output_file(grid,current_year,current_jday,MECHANISM) !write output file
+            !call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all)               !convert to mechanism species before write the output
+            call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all, cell_area)     !convert to mechanism species before write the output
             call write_output_file(grid,current_year,current_month,current_day,MECHANISM) !write output file
             if ( current_date_s == end_date_s ) stop 'MEGAN finished succesfully.';
          endif
 
-         call get_daily_data(grid,DDD)
+         call GET_DAILY_DATA(grid,DDD)                                                    !get daily data
 
-         !when new month begins:
-         if ( current_month /= MM ) then
+         if ( current_month /= MM ) then                                                  !when new month begins:
             current_month=MM
-            call get_monthly_data(grid,MM)
+            call GET_MONTHLY_DATA(grid,MM)                                                !get monthly data
          endif    
          out_buffer=0.0;out_buffer_all=0.0;times_array=""
       endif    
-         current_day=DD;current_jday=DDD;current_month=MM;current_year=YYYY
+      current_day=DD;current_jday=DDD;current_month=MM;current_year=YYYY                  !update current date
  
-      t=findloc(Times == current_date, .true.,1)          !get index in time dimension of current date-time
-      if ( t == 0) then                                   !if nothing found try update Times
-         call get_Times(met_file, Times)                  !
-         t=findloc(Times == current_date, .true.,1)       !get index in time dimension of current date-time
+      t=findloc(Times == current_date, .true., 1)                                         !get index in time dimension of current date-time
+      if ( t == 0) then                                                                   !if nothing found try update Times
+         call get_Times(met_file, Times)                                                  !
+         t=findloc(Times == current_date, .true.,1)                                       !get index in time dimension of current date-time
          if ( t == 0 ) then 
             print '("(!) Date-time not found in file:",A19,A50)', current_date, met_file
             print*, Times
@@ -181,24 +178,35 @@ end if
          end if
       end if
       Times_array(atoi(HH))=Times(t)
-      
-      call get_hourly_data(grid,t)                       !get hourly meteo data
 
-      !@DEBUG-DEBUG-DEBUG-DEBUG-DEBUG-DEBUG
-      !@call write_diagnostic_file(grid)                  !debug
-      !@DEBUG-DEBUG-DEBUG-DEBUG-DEBUG-DEBUG
-      !----------------------
+      call GET_HOURLY_DATA(grid,t)                                                         !get hourly meteo data
+
+      !--TO_DO-------------------------------------------
+      !An idea of how to implement daily variables:
+      !tmp24(t)=tmp    !buffer with last 24 hours values     
+      !rad24(t)=ppfd   !buffer with last 24 hours values
+      !wnd24(t)=wind   !buffer with last 24 hours values
+      !
+      !tmp_min=minval(tmp24,3)
+      !tmp_max=maxval(tmp24,3)
+      !wnd_max=maxval(wnd24,3)
+      !tmp_avg=avgval(tmp24,3) !I should program the avgVal() function!
+      !rad_avg=avgval(rad24,3)
+      !------------------------------------------------
+
+      !@call write_diagnostic_file(grid)                   !debug
+      !----------------------                                                              !run megan_voc
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),      & !date: year, julian day, hour.
-             grid%nx,grid%ny, lat,lon,                   & !dimensions (ncols,nrows), latitude, longitude coordinates
-             tmp,ppfd,wind,pre,hum,                      & !Temperature [ºK], Photosynthetic Photon Flux Density [W m-2], Wind speed [m/s], Pressure [Pa], Humidity [m3/m3]
+             grid%nx,grid%ny,lat,lon,                    & !dimensions (ncols,nrows) & coordinates
+             tmp,ppfd,wind,pre,hum,                      & !Tmp.[ºK], Photosynthetic Photon Flux Density [W m-2], Wind spd.[m/s], Press.[Pa], Humdty.[m3/m3]
              lai, lai,                                   & !LAI (past) [1], LAI (current) [1]
-             ctf, ef, ldf_in,                            & !Canopy type fraction [1], Emission Factors [ug m-2 h-1], light-dependent fraction [1]
+             ctf, ef, ldf_in,                            & !Canopy type frac. [1], Emission Factors [ug m-2 h-1], light-dependent fraction [1]
              lsm,stype,smois,                            & !land surface model, soil typ category, soil moisture 
-             tmp,tmp,wind,tmp,ppfd,                      & !max temp, min temp, max wind, daily temp and daily ppfd
-             !tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg, &  !max temp, min temp, max wind, daily temp and daily ppfd
-             out_buffer(:,:,:,atoi(HH))                  ) !Emis array
+             tmp,tmp,wind,tmp,ppfd,                      & !max temp, min temp, max wind, daily temp & ppfd
+             !tmp_max,tmp_min,wind_max,tmp_avg,rad_avg,  & !max temp, min temp, max wind, daily avg of temp & ppfd
+             out_buffer(:,:,:,atoi(HH))                  ) !Emis Flux array [mole m-2 s-1]
 
-      !----------------------
+      !----------------------                                                              ! run megan_nox 
       !soil NO model:
       if ( run_bdsnp ) then
           !call bdsnp_nox()                                
@@ -209,7 +217,7 @@ end if
                  tmp,rain,                               & !temperature [ºK], precipitation rate [mm]
                  lsm,stype,stemp,smois,                  & !land-surface-model, soil_type_clasification, soil temperature [ºK], soil mositure [m3/m3]
                  ctf, lai,                               & !canopy type fraction [1], leaf-area-index [1]
-                 out_buffer(:,:,i_NO,atoi(HH))           ) !emision flux array [??/??]
+                 out_buffer(:,:,i_NO,atoi(HH))           ) !emision flux array [mole m-2 s-1]
       endif
       !laip=laic
 
@@ -346,9 +354,9 @@ character(250) function update_filename(file_names, idate)
     implicit none
     character(len=*),intent(in) :: file_names
     character(len=*),intent(in) :: idate
-    character(len=4) :: YYYY
-    character(len=3) :: DDD
-    character(len=2) :: MM, DD, HH
+    character(len=4)  :: YYYY
+    character(len=3)  :: DDD
+    character(len=2)  :: MM, DD, HH
     character(len=17) :: tmp
     tmp=trim(date(idate,'%Y %m %d %j %H'))
     read(tmp,*),YYYY,MM,DD,DDD,HH
@@ -372,9 +380,9 @@ subroutine get_static_data(g)
   allocate(     ctf(g%nx,g%ny,NRTYP         ))
 
   if ( run_bdsnp ) then
-     allocate(    arid(g%nx,g%ny               ))
-     allocate(non_arid(g%nx,g%ny               ))
-     allocate(landtype(g%nx,g%ny               ))
+     allocate(    arid(g%nx,g%ny            ))
+     allocate(non_arid(g%nx,g%ny            ))
+     allocate(landtype(g%nx,g%ny            ))
      print '("   Reading: ",A50))',trim(static_file)//":LAND" !static_file !land_file !debug
      !LAND                                                                               
      call check(nf90_open(trim(static_file), nf90_write, ncid ))
@@ -387,12 +395,10 @@ subroutine get_static_data(g)
    print '("   Reading: ",A50))',trim(static_file) !debug
   call check(nf90_open(trim(static_file), nf90_write, ncid ))
       call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
-
       call check( nf90_inq_varid(ncid,'CTF', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1,1],[g%nx,g%ny,1,NRTYP]))
       call check( nf90_inq_varid(ncid,"EFS", var_id )); call check( nf90_get_var(ncid, var_id , EF ))  !new v3.3
       call check( nf90_inq_varid(ncid,"LDF", var_id )); call check( nf90_get_var(ncid, var_id , LDF ))  !new v3.3
   call check(nf90_close(ncid))
-  ctf=CTF*0.01  !from % to [0-1].
 
   !From meteo:
   print '("   Reading: ",A50))',met_file !debug
@@ -514,18 +520,16 @@ subroutine get_monthly_data(g,MM)!,lai,ndep)
 end subroutine
 
 !OUTPUT ----------------------------------------------------------------
-!subroutine write_output_file(g,YYYY,DDD,MECHANISM)
 subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
   implicit none
   type(grid_type) , intent(in) :: g
   character(len=5), intent(in) :: MECHANISM
   character(len=4), intent(in) :: YYYY
-  !character(len=3), intent(in) :: DDD
   character(len=2), intent(in) :: MM,DD
   !local vars
   integer             :: ncid,var_id,t_dim_id,x_dim_id,y_dim_id,z_dim_id,str_dim_id,s_dim_id,var_dim_id
   integer             :: k!,i,j
-  character(len=29)   :: out_file
+  character(len=31)   :: out_file
   character(len=10)   :: current_date
                         
    current_date=YYYY//"-"//MM//"-"//DD
@@ -546,9 +550,6 @@ subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
      call check(nf90_def_var(ncid,"lon"  , NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
      call check(nf90_def_var(ncid,"cell_area", NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
      !time
-     !call check(nf90_def_var(ncid,"Times", NF90_CHAR   , [str_dim_id,t_dim_id], var_id))
-     !call check(nf90_put_att(ncid, var_id, "units"     , "%Y-%m-%d %H:%M:%S"       ))
-     !call check(nf90_put_att(ncid, var_id, "var_desc"  , "date-time variable"      ))
      call check(nf90_def_var(ncid,"time" ,NF90_INT       , [t_dim_id], var_id  ));
      call check(nf90_put_att(ncid, var_id,"units"        , "seconds since "//current_date//" 00:00:00 UTC" ));  !"%Y-%m-%d %H:%M:%S"
      call check(nf90_put_att(ncid, var_id,"long_name"    , "time"              ));
@@ -560,8 +561,9 @@ subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
      do k=1,NMGNSPC !n_scon_spc !
         call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
         !call check( nf90_put_att(ncid, var_id, "units"      , "mole m-2 s-1"       ))
+        !call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision flux"      ))
         call check( nf90_put_att(ncid, var_id, "units"      , "mole s-1"          ))   !if multiplied by cell_area
-        call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision flux"      ))
+        call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision rate"      )) 
      end do
    call check(nf90_enddef(ncid))   !End NetCDF define mode
 
@@ -570,11 +572,10 @@ subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
      call check(nf90_inq_varid(ncid,"lat"      ,var_id)); call check(nf90_put_var(ncid, var_id, lat ))
      call check(nf90_inq_varid(ncid,"lon"      ,var_id)); call check(nf90_put_var(ncid, var_id, lon ))
      call check(nf90_inq_varid(ncid,"cell_area",var_id)); call check(nf90_put_var(ncid, var_id, cell_area ))
-     !call check(nf90_inq_varid(ncid,"Times",var_id)); call check(nf90_put_var(ncid, var_id, Times_array ))         
-     call check(nf90_inq_varid(ncid,"time",var_id)); call check(nf90_put_var(ncid, var_id, [ (60*60*k,k=0,23 ) ] )) !area/mapfactor_squared = (g%dx*g%dy)/(mapfac*mapfac)
+     call check(nf90_inq_varid(ncid,"time",var_id))     ; call check(nf90_put_var(ncid, var_id, [ (60*60*k,k=0,23 ) ] ))
      do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
        !print*,"    Especie:",trim(mech_spc(k)) !debug
-       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer_all(:,:,k,:) )) !area/mapfactor_squared = (g%dx*g%dy)/(mapfac*mapfac)
+       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer_all(:,:,k,:) )) 
      enddo
    call check(nf90_close( ncid ))
 end subroutine write_output_file
