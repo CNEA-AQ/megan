@@ -26,7 +26,7 @@ df=merge(EF[c("VegID","GrowthForm")],SpTree, by="VegID",all.y = T)              
    SpNtr=subset(df,GrowthForm=="Ntr")                                           #Get only Ntr species.
    NtEtFracs=aggregate(x = SpNtr$SpFrac, by=list(et=SpNtr$EcotypeID),FUN=sum)   #Compute partial-fraction: Ntr/tree
    for (i in c(1:nrow(NtEtFracs))){
-     k=NtEtFracs$x[i]
+     k=max(NtEtFracs$x[i],1e-23)
      et=NtEtFracs$et[i]
      SpNtr$SpFrac[which(SpNtr$EcotypeID==et)]=SpNtr$SpFrac[which(SpNtr$EcotypeID==et)]/k
    }
@@ -34,7 +34,7 @@ df=merge(EF[c("VegID","GrowthForm")],SpTree, by="VegID",all.y = T)              
    SpBtr=subset(df,GrowthForm=="Btr")                                           #Get only Btr species.
    BtEtFracs=aggregate(SpBtr$SpFrac,by=list(et=SpBtr$EcotypeID),FUN=sum)        #Compute partial fraction: Btr/Tree
    for (i in c(1:nrow(NtEtFracs))){
-     k =BtEtFracs$x[i]   
+     k =max(1e-23,BtEtFracs$x[i])   
      et=BtEtFracs$et[i]   
      SpBtr$SpFrac[which(SpBtr$EcotypeID==et)]=SpBtr$SpFrac[which(SpBtr$EcotypeID==et)]/k   
    }
@@ -66,6 +66,9 @@ M[c("References","Comment","X","Family","GenusGroup","CommonName","Type","Growth
 #Multiply EF by Fraction and then Sum
 efs=c(paste("EF",c(1:19),sep=""),paste("LDF",c(3:6),sep=""))
 M[efs]=M[efs]*M$SpFrac
-CF_byET_byGT=aggregate(M[efs],by=list(et=M$EcotypeID,gt=M$Gtyp),FUN=sum)
 
-write.csv(CF_byET_byGT,"GtEFbyEcotype_new.csv")
+DF=aggregate(M[efs],by=list(gt=M$Gtyp,et=M$EcotypeID),FUN=sum)
+DF=DF[order(DF$gt),]
+DF=format(DF,digits=3,nsmall=3)
+write.csv(DF,"GtEFbyEcotype_new.csv",quote = F,row.names = F)
+  

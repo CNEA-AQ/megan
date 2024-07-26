@@ -109,17 +109,14 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
   integer :: x_dim_id,y_dim_id,cty_dim_id,ef_dim_id,ldf_dim_id,i,j,k
   !CTF: 
   real, allocatable :: CTF(:,:,:)          !CTF buffer
+  character(len=6)  :: CTF_LIST(6)         ![Ntr, Trop, Btr, shrub, herb, crop] ! tree]
   !EF & LDF:
   integer, allocatable :: ECOTYPE(:,:)      !Ecotype classification
-  real   , allocatable :: GTYP(:,:,:)       !CTF (crop, tree, grass, shrub)
   integer              :: EcoID             !EcoID read in table file
   character(len=6)     :: GtID              !GtID  read in table file
   real                 :: EF(NEFS+NLDFS)    !EFs   read in table file 
   real, allocatable    :: OUTGRID(:,:,:)    !EF and LDF buffer
-  character(len=6)     :: CTF_LIST(4)       ![crop, tree, grass, shrub]
-  
   !real, allocatable :: OUTGRID(:,:,:,:)   !test v3.3
-  !character(len=6) :: CTF_LIST(7) ! crop, tree, grass, shrub
   !LAND (arid, non-arid, landtype)
   real, allocatable    :: LANDGRID(:,:,:)   !LAND buffer
 
@@ -142,6 +139,8 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
     call check(nf90_put_att(ncid, var_id,"units"    , "m2"                            ))
     call check(nf90_put_att(ncid, var_id,"var_desc" , "horizontal area of a gridcell" ))
 
+    !ECOTYPE
+    call check(nf90_def_var(ncid, "ETY" , NF90_INT, [x_dim_id,y_dim_id],var_id)) !debug
     ! CTF:
     call check(nf90_def_var(ncid, "CTF" , NF90_FLOAT, [x_dim_id,y_dim_id,cty_dim_id],var_id))
     call check(nf90_put_att(ncid, var_id,"long_name", "CANOPY_TYPE_FRACTION"               ))
@@ -187,13 +186,13 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
      !--------
      ! CTF:
      print*,"CTF"
-     allocate(CTF(g%nx,g%ny,ncantype+1))  ! allocate(CTF(g%nx,g%ny,nvars))  
+     allocate(CTF(g%nx,g%ny,ncantype+1))
 
      CTF(:,:,1)=interpolate(p,g,inp_file=ctf_file, varname="nl_tree"  , method="bilinear")
-     CTF(:,:,2)=interpolate(p,g,inp_file=ctf_file, varname="trop_tree", method="bilinear") !Q: is it just 100% if lat between tropics, else 0% ?
+     CTF(:,:,2)=interpolate(p,g,inp_file=ctf_file, varname="trop_tree", method="bilinear") 
      !CTF(:,:,3) = !boradleaf tree!
      CTF(:,:,4)=interpolate(p,g,inp_file=ctf_file, varname="shrub"    , method="bilinear")
-     CTF(:,:,5)=interpolate(p,g,inp_file=ctf_file, varname="grass"    , method="bilinear")
+     CTF(:,:,5)=interpolate(p,g,inp_file=ctf_file, varname="grass"    , method="bilinear")  !(Herb)
      CTF(:,:,6)=interpolate(p,g,inp_file=ctf_file, varname="crop"     , method="bilinear")
      CTF(:,:,7)=interpolate(p,g,inp_file=ctf_file, varname="tree"     , method="bilinear")
 
@@ -212,21 +211,15 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
      !EFs & LDF
      print*,"EFS & LDF"
      allocate( ECOTYPE(g%nx, g%ny   ))   !ecotype
-     allocate(    GTYP(g%nx, g%ny,4 ))   !growthtype fracs
 
-     ECOTYPE(:,:)=FLOOR(interpolate(p,g,ecotype_file,varname="ecotype", method="mode"))
-     !
-     CTF_LIST=(/'crop ','tree ','grass','shrub'/)
-     GTYP(:,:,1)=interpolate(p,g,ctf_file,varname="crop" , method="bilinear")
-     GTYP(:,:,2)=interpolate(p,g,ctf_file,varname="tree" , method="bilinear")
-     GTYP(:,:,3)=interpolate(p,g,ctf_file,varname="grass", method="bilinear")
-     GTYP(:,:,4)=interpolate(p,g,ctf_file,varname="shrub", method="bilinear")
-     !CTF_LIST=["NlTree","TrTree","BrTree","shrub ","grass ","crop  ","tree  "]
-     !where ( CTF < 0.0 )
-     !        CTF = 0.0
-     !endwhere
-     !CTF=CTF/100  ! % -> (0-1) . xq las frac están en porcentaje.
-     allocate(OUTGRID(g%nx, g%ny, nefs+nldfs))   !outgrids EF1,EF2,...,LDF1,LDF2,..
+     
+     ECOTYPE(:,:)=FLOOR(interpolate(p,g,ecotype_file,varname="ecotype", method="mode"))  !TARDA MUCHO ACA!
+     call check(nf90_inq_varid(ncid,"ETY",var_id)); call check(nf90_put_var(ncid, var_id, ECOTYPE(:,:) ))       !debug 
+
+     
+     CTF_LIST=['Ntr  ','Trop ','Btr  ','Shrub','Herb ','Crop '] !new: 
+
+     allocate(OUTGRID(g%nx, g%ny, nefs+nldfs))        !outgrids EF1,EF2,...,LDF1,LDF2,..
      !allocate(OUTGRID(g%nx, g%ny, nefs, ncantype))   !outgrids EF1,EF2,...,LDF1,LDF2,.. !test v3.3
      OUTGRID=0.0
      j=0
@@ -238,15 +231,14 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
                                                                           !tree      1700      EF01, EF02, ..., EF19, LDF01, ..., LDF04
           if ( j /= FINDLOC(CTF_LIST, GtID,1) ) then
                 j=FINDLOC(CTF_LIST, GtID,1)
-                !if (j==7) j=1
                 print*,"   Processing Growth-type: "//GtID
           endif
          !=======> (!) ACÁ está el cuello de botella <=====
          do i=1,NEFS+NLDFS  !nvars: EF/LDF
          where ( ECOTYPE == EcoID )
-             OUTGRID(:,:,i) = OUTGRID(:,:,i) + GTYP(:,:,j) * EF(i)
-             !OUTGRID(:,:,i,j) =  CTF(:,:,j) * EF(i)  !test v3.3
-             !OUTGRID(:,:,i,j) = EF(i)                !test v3.3
+             OUTGRID(:,:,i) = OUTGRID(:,:,i) + CTF(:,:,j) * EF(i)         !new
+             !OUTGRID(:,:,i,j) =  CTF(:,:,j) * EF(i)                      !test v3.3
+             !OUTGRID(:,:,i,j) = EF(i)                                    !test v3.3
              !OUTGRID(:,:,i,j) = OUTGRID(:,:,i,j) +  EF(i)                !test v3.3
          endwhere
          enddo !i (var)
