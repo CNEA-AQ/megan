@@ -70,5 +70,6 @@ M[efs]=M[efs]*M$SpFrac
 DF=aggregate(M[efs],by=list(gt=M$Gtyp,et=M$EcotypeID),FUN=sum)
 DF=DF[order(DF$gt),]
 DF=format(DF,digits=3,nsmall=3)
-write.csv(DF,"GtEFbyEcotype_new.csv",quote = F,row.names = F)
+write.table(DF,"GtEFbyEcotype_new.csv",sep=",",dec=".",quote = F,row.names = F,col.names = F)
   
+rm(list=ls())

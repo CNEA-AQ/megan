@@ -211,13 +211,13 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
      !EFs & LDF
      print*,"EFS & LDF"
      allocate( ECOTYPE(g%nx, g%ny   ))   !ecotype
-
-     
+     !!!!!!!!!!!TARDA MUCHO ACA!!!!!!!!!!!!!!!!!
      ECOTYPE(:,:)=FLOOR(interpolate(p,g,ecotype_file,varname="ecotype", method="mode"))  !TARDA MUCHO ACA!
+     !!!!!!!!!!!TARDA MUCHO ACA!!!!!!!!!!!!!!!!!
      call check(nf90_inq_varid(ncid,"ETY",var_id)); call check(nf90_put_var(ncid, var_id, ECOTYPE(:,:) ))       !debug 
-
      
      CTF_LIST=['Ntr  ','Trop ','Btr  ','Shrub','Herb ','Crop '] !new: 
+     CTF(:,:,3)=CTF(:,:,3)+CTF(:,:,2) !add tropical trees to the broad leaf category since we dont have EF for tropical yet.
 
      allocate(OUTGRID(g%nx, g%ny, nefs+nldfs))        !outgrids EF1,EF2,...,LDF1,LDF2,..
      !allocate(OUTGRID(g%nx, g%ny, nefs, ncantype))   !outgrids EF1,EF2,...,LDF1,LDF2,.. !test v3.3
@@ -228,7 +228,7 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
        do while(iostat == 0)       !loop por cada fila                    !crop      1         EF01, EF02, ..., EF19, LDF01, ..., LDF04
           read(1,*,iostat=iostat) GtID, EcoID, EF                         !crop      2         EF01, EF02, ..., EF19, LDF01, ..., LDF04
                                                                           !....      ...       EF01, EF02, ..., EF19, LDF01, ..., LDF04
-                                                                          !tree      1700      EF01, EF02, ..., EF19, LDF01, ..., LDF04
+                                                                          !herb      1700      EF01, EF02, ..., EF19, LDF01, ..., LDF04
           if ( j /= FINDLOC(CTF_LIST, GtID,1) ) then
                 j=FINDLOC(CTF_LIST, GtID,1)
                 print*,"   Processing Growth-type: "//GtID
@@ -256,7 +256,7 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
 
    !LAND FIELDS (BDSNP)
    if (run_BDSNP) then
-   print*,"BDSNP (LAND)"    
+     print*,"BDSNP (LAND)"    
      allocate(LANDGRID(g%nx,g%ny,ncantype+1))  ! allocate(CTF(g%nx,g%ny,nvars))  
      LANDGRID(:,:,1) = interpolate(p,g,climate_file , varname="arid"    , method="mode")
      LANDGRID(:,:,2) = 1  
