@@ -1,9 +1,10 @@
 &megan_nl
-  start_date='2022-10-19 19:00:00',   ! YYYY-MM-DD HH:MM:SS
-  end_date  ='2022-10-20 12:00:00',   ! YYYY-MM-DD HH:MM:SS
-  
-  met_files='wrfout_test',            ! Meteo file path
-  LSM='NOAH',                         ! Land Surface Model (LSM) used in meteo
+   start_date='2019-01-01 00:00:00',  !YYYY-MM-DD HH:MM:SS
+   end_date  ='2019-01-02 00:00:00',  !YYYY-MM-DD HH:MM:SS
+
+   met_files='wrfout_d01_<date>_<time>', !Pattern of meteo files paths
+
+   LSM='NOAH', !'JN90', !             ! land surface model (LSM) used in meteo
 
   mechanism='CB05',                   !'RACM2','CB05',CB6_ae7','CRACMM','SAPRC07',
   
@@ -15,7 +16,7 @@
 /
 &prep_megan_nl
    griddesc='GRIDDESC',
-   gridname='LCC_TAN_TEST', !
+   gridname='LCC_TAN_TEST',!'MERC_TEST',!
    
    eco_glb='input/veg_Ecotypes.nc',
    ctf_glb='input/veg_GrowthFormFracions.nc',
@@ -26,5 +27,5 @@
    ndep_glb='input/soil_nitro.nc',
    fert_glb='input/soil_fert.nc',
 
-   GtEcoEF="db/GtEFbyEcotype.csv",    !Emission factor of each GT grouped by Ecotype
+   GtEcoEF="GtEFbyEcotype_new.csv", !"db/GtEFbyEcotype.csv",    !Emission factor of each GT grouped by Ecotype
 /
