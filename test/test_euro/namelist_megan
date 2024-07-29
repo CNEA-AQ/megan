@@ -27,5 +27,5 @@
    ndep_glb='input/soil_nitro.nc',
    fert_glb='input/soil_fert.nc',
 
-   GtEcoEF="db/GtEFbyEcotype.csv",    !Emission factor of each GT grouped by Ecotype
+   GtEcoEF="GtEFbyEcotype_new.csv",    !Emission factor of each GT grouped by Ecotype
 /
