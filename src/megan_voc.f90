@@ -7,7 +7,7 @@ module voc_mod
    !public megan_voc
 
    !Version dependent parameters:
-   integer, parameter :: NrTyp  = 6   !Number of "Canopy types": trees (needle,broad,tropical),shrub,grass,crop.
+   integer, parameter :: NrTyp  = 6   !Number of "Canopy types": trees (needle,broad,tropical),shrub,herb,crop.
    integer, parameter :: NCLASS = 19  !MEGAN Internal Emission Categories
    integer, parameter :: layers = 5   !canopy layers
    !---

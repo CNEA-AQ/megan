@@ -198,7 +198,7 @@ end if
       !----------------------                                                              !run megan_voc
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),      & !date: year, julian day, hour.
              grid%nx,grid%ny,lat,lon,                    & !dimensions (ncols,nrows) & coordinates
-             tmp,ppfd,wind,pre,hum,                      & !Tmp.[ºK], Photosynthetic Photon Flux Density [W m-2], Wind spd.[m/s], Press.[Pa], Humdty.[m3/m3]
+             tmp,ppfd,wind,pre,hum,                      & !Tmp.[ºK], Photosynthetic Photon Flux Density [W/m2], Wind spd.[m/s], Press.[Pa], Humdty.[m3/m3]
              lai, lai,                                   & !LAI (past) [1], LAI (current) [1]
              ctf, ef, ldf_in,                            & !Canopy type frac. [1], Emission Factors [ug m-2 h-1], light-dependent fraction [1]
              lsm,stype,smois,                            & !land surface model, soil typ category, soil moisture 
@@ -314,8 +314,6 @@ subroutine get_grid_parameters(meteo_file,g,lat,lon,times)
       call check (nf90_inq_dimid(ncid,'bottom_top' ,  dimId   ))
       call check (nf90_inquire_dimension(ncid, dimId,len=g%nz ))
   
-      g%nx=g%nx-2;g%ny=g%ny-2 !(!) esto hay que arreglarlo! (supongo que elimina los bordes) (!) 
-     
       call check (nf90_get_att(ncid, nf90_global, "DX", g%dx) )
       call check (nf90_get_att(ncid, nf90_global, "DY", g%dy) )
 
@@ -394,9 +392,9 @@ subroutine get_static_data(g)
   !CTS, EFS, LDF 
    print '("   Reading: ",A50))',trim(static_file) !debug
   call check(nf90_open(trim(static_file), nf90_write, ncid ))
-      call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
+     call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
       call check( nf90_inq_varid(ncid,'CTF', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1,1],[g%nx,g%ny,1,NRTYP]))
-      call check( nf90_inq_varid(ncid,"EFS", var_id )); call check( nf90_get_var(ncid, var_id , EF ))  !new v3.3
+      call check( nf90_inq_varid(ncid,"EFS", var_id )); call check( nf90_get_var(ncid, var_id , EF ))   !new v3.3
       call check( nf90_inq_varid(ncid,"LDF", var_id )); call check( nf90_get_var(ncid, var_id , LDF ))  !new v3.3
   call check(nf90_close(ncid))
 
@@ -529,12 +527,12 @@ subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
   !local vars
   integer             :: ncid,var_id,t_dim_id,x_dim_id,y_dim_id,z_dim_id,str_dim_id,s_dim_id,var_dim_id
   integer             :: k!,i,j
-  character(len=31)   :: out_file
+  character(len=50)   :: out_file
   character(len=10)   :: current_date
                         
    current_date=YYYY//"-"//MM//"-"//DD
    !File name
-   out_file="emis_bio_d01_"//current_date//"_"//trim(MECHANISM)//".nc"
+   out_file="emis_bio_"//current_date//"_"//trim(MECHANISM)//".nc"
    print '(/" Writing out file: ",A/)',trim(out_file)
 
    !Crear NetCDF
