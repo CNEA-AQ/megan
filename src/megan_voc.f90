@@ -27,11 +27,11 @@ contains
 
 subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,hour
              ncols,nrows,lat,long,                         & !dimensions, latitude, longitude coordinates
-             temp,rad,wind,pres,qv,                        & !air temperature [ºK], Photosynthetic Photon Flux Density [W m-2], Wind speed [m/s], Pressure [Pa], Humidity [m3/m3]
+             temp,rad,wind,pres,qv,                        & !air temperature [ºK], Photosynt. Phton Flx Dnsty [W m-2], Wind spd. [m/s], Press [Pa], Humdty [m3/m3]
              laip, laic,                                   &
              ctf, efmaps, ldf_in,                          & !lai,emis factors, light emis factors
              lsm,soil_type,soil_moisture,                  & !land surface model, soil type, soil_moisture
-             tmp_max, tmp_min, wind_max, tmp_avg, rad_avg, & !meteo daily
+             tmp_max, tmp_min, wind_max, tmp_avg, ppfd_avg, & !meteo daily
              non_dimgarma) !emis                           ) !out: Emision values
 
     implicit none
@@ -39,7 +39,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
     integer, intent(in)                           :: yyyy, ddd, hh           ! year, jday, hour
     integer, intent(in)                           :: ncols, nrows!, layers    !dims x,y
     real,    intent(in), dimension(ncols,nrows)   :: lat, long, temp, rad, wind, pres, qv, laip,laic
-    real,    intent(in), dimension(ncols,nrows)   :: tmp_avg,rad_avg,tmp_min,tmp_max,wind_max
+    real,    intent(in), dimension(ncols,nrows)   :: tmp_avg,ppfd_avg,tmp_min,tmp_max,wind_max
 
     real,    intent(in)     :: ctf(ncols,nrows,nrtyp) !canopy type factor array
     real,    intent(in)     :: efmaps(ncols,nrows,19) !only 19
@@ -159,9 +159,9 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
              hour  = hour - 24.0; day  = real(ddd)  + 1
            endif
 
-           TairK0   = temp(i,j)      !temp (from meteo)
-           Ws0      = wind(i,j)      !wind (from meteo)
-           Solar    = rad(i,j)/2.25  !solar rad. (from meteo) [W m-2] -> [umol photons m-2 s-1]
+           TairK0   = temp(i,j)      !air temperature   [K]                    (from meteo)
+           Ws0      = wind(i,j)      !wind velocity     [m/s]                  (from meteo)
+           Solar    = rad(i,j)!/2.25 !phton dnsity flux [umol photons m-2 s-1] (from meteo)
 
            !(1) calc solar angle
            zenith      = CalcZenith(day,lat(i,j),hour)
@@ -247,11 +247,13 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
 
         do s=1,NCLASS ! Loop over all the emission classes
 
+            ! Light Dependent Emission Factors (LDF)
             IF ( S .EQ. 3 .OR. S .EQ. 4 .OR. S .EQ. 5 .OR. S .EQ. 6 ) THEN
                 LDFMAP = LDF_IN(i,j,S-2) ! only LDF 3, 4, 5, and 6 in file
             ELSE
                 LDFMAP = LDF(S) !For these species,  Read LDF from previous MEGVEA.EXT 
             ENDIF
+
             ! EA response to leaf age 
             gamla = gamma_age(s, laip(i,j), laic(i,j), tmp_avg(i,j))
             ! EA response to air quality
@@ -266,8 +268,9 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
             SUM1 = 0.0
             SUM2 = 0.0
             do k = 1, layers
-              Ea1L = CDEA(K) * GAMTLD(SunT(k),tmp_avg(i,j),S) * GAMP(SunP(k),rad_avg(i,j)) *        SunF(k)  + &! *2.025 is the conversion to PPFD. 
-                               GAMTLD(ShaT(k),tmp_avg(i,j),S) * GAMP(ShaP(k),rad_avg(i,j)) * (1.0 - SunF(k) )   ! *2.025 is the conversion to PPFD. 
+              Ea1L = CDEA(K) *                                                                       &
+                     GAMTLD(SunT(k),tmp_avg(i,j),S) * GAMP(SunP(k), ppfd_avg(i,j)) *        SunF(k) + &
+                     GAMTLD(ShaT(k),tmp_avg(i,j),S) * GAMP(ShaP(k), ppfd_avg(i,j)) * (1.0 - SunF(k) )  
               SUM1 = SUM1 + Ea1L * VPGWT(K)
 
               Ea2L = GAMTLI(SunT(k),S) * SunF(k) + GAMTLI(ShaT(k),S) * (1.0-SunF(k))

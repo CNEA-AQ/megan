@@ -1,6 +1,6 @@
 &megan_nl
    start_date='2019-01-01 00:00:00',  !YYYY-MM-DD HH:MM:SS
-   end_date  ='2019-01-02 00:00:00',  !YYYY-MM-DD HH:MM:SS
+   end_date  ='2019-01-02 23:00:00',  !YYYY-MM-DD HH:MM:SS
 
    met_files='wrfout_d01_<date>_<time>', !Pattern of meteo files paths
 
