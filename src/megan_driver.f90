@@ -1,10 +1,11 @@
 program main
-   ! program:     MEGAN v3.3
-   ! description: biogenic VOCs emission model (by Alex Guenther)
-   ! authors:     Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, among others.
-   ! programmed:  Ramiro A. Espada
+   ! program:        MEGAN v3.3
+   ! description:    biogenic VOCs emission model (by Alex Guenther)
+   ! authors:        Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, among others.
+   ! programmed by:  Ramiro A. Espada (from Lakes Environmental Software)
 
    use netcdf   
+   use datetime_module, only: datetime, timedelta, strptime
    use voc_mod   !megan module: (megan_voc)
    use nox_mod   !megan module: (megan_nox)
    !use bdsnp    !megan module: (bdsnp_nox)
@@ -40,6 +41,7 @@ program main
    !Variables: 
    integer :: iostat
    integer :: t,i!,j,k
+   integer :: ierr
 
    type(grid_type) :: grid
 
@@ -47,9 +49,8 @@ program main
    character(4) :: YYYY,current_year                           
    character(3) :: DDD,current_jday                            
    character(2) :: MM,DD,HH,current_day="99",current_month="99"
-   integer      :: end_date_s,current_date_s!,n_hours
-   !character(19),dimension(24) :: Times_array=""
    character(len=19) :: current_date
+   type(datetime)    :: current_date_s, end_date_s
 
    !input variables:
    character(19), allocatable, dimension(:) :: times                         !(t)     <- from wrfout
@@ -74,6 +75,7 @@ program main
 
    !megan namelist variables:
    character(len=19) :: start_date, end_date
+
    character(len=16) :: mechanism='CBM05'            !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
    character(4)      :: lsm                          !land surface model used on meteo: NOAH, JN90
    character(250)    :: met_files                    !path to wrf meteo files
@@ -81,7 +83,7 @@ program main
    logical           :: prep_megan=.false., run_bdsnp=.false., use_meteo_lai=.false.   !flags 
 
    !prep-megan namelist variables:
-   character(200):: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
+   character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
 
    !---read namelist variables and parameters
    namelist/megan_nl/start_date,end_date,met_files,lsm,mechanism,static_file,dynamic_file,prep_megan,run_bdsnp,use_meteo_lai
@@ -137,13 +139,16 @@ end if
    allocate(out_buffer(grid%nx,grid%ny,NCLASS,0:23))        !24)) !non-dimensional emision rates of each megan species categories
    !=== 
    print '(/" Init. temporal loop.. ")'
-   current_date_s = atoi( date(start_date, "%s"))
-       end_date_s = atoi( date(  end_date, "%s"))
+
+   current_date_s = strptime(start_date,'%Y-%m-%d %H:%M:%S')
+   end_date_s     = strptime(  end_date,'%Y-%m-%d %H:%M:%S')
    
-   do while (current_date_s <= end_date_s)                                                !temporal loop
-      current_date=date("@"//itoa(current_date_s),"%Y %m %d %j %H")
+   do while ( current_date_s <= end_date_s )                                                !temporal loop
+      current_date=current_date_s%strftime("%Y %m %d %j %H")
       read(current_date ,*) yyyy,mm,dd,ddd,hh                      !
+
       current_date=YYYY//"-"//MM//"-"//DD//" "//HH//":00:00"                              !get current date in format: %Y-%m-%d %H:%M:%S
+
       print*,"  Current date: ",current_date
 
       met_file=update_filename(met_files,current_date)                                    !update meteo file name/path according to current date-time
@@ -176,12 +181,10 @@ end if
             stop
          end if
       end if
-      !Times_array(atoi(HH))=Times(t)
 
-      call GET_HOURLY_DATA(grid,t,atoi(HH)+1)                                            !get hourly meteo data
+      call GET_HOURLY_DATA(grid,t,atoi(HH)+1)                                             !get hourly meteo data
 
-      !@call write_diagnostic_file(grid)                   !debug
-      !----------------------                                                              !run megan_voc
+      !----------------------                                                             !run megan_voc
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),      & !date: year, julian day, hour.
              grid%nx,grid%ny,lat,lon,                    & !dimensions (ncols,nrows) & coordinates
              tmp,ppfd,wind,pre,hum,                      & !Tmp.[ºK], Photosynthetic Photon Flux Density [W/m2], Wind spd.[m/s], Press.[Pa], Humdty.[m3/m3]
@@ -206,11 +209,8 @@ end if
       endif
       !laip=laic
 
-      !!!----DEBUG
-      !!print '("  Escribiendo archivo diagnóstico.. ")'
-      !!call write_diagnostic_file(grid)
+      current_date_s  = current_date_s + timedelta(hours=1)               !Define next expected date
 
-      current_date_s=current_date_s + 3600  !next hour
    enddo!time loop
 
 contains
@@ -265,19 +265,6 @@ pure function replace(string, s1, s2) result(str)
           i=i+1
         enddo
     endif
-end function
-
-!DATE TOOLS ------------------------------------------------------------
-character(len=20) function date(date_str, fmt_str) result(output)
-  !Interace to "date". (!) Problem: only works for UNIX/Linux users.
-  implicit none
-  integer :: iostat
-  character(*), intent(in) :: date_str, fmt_str
-  character(256)           :: command
-  command="date -d '"//trim(date_str)//"' '+"//trim(fmt_str)//"'  > tmp.date"
-  call system( trim(command) )
-  open(9, file='tmp.date', status='old',action='read'); read(9, '(A)', iostat=iostat) output;  close(9)
-  call system('rm tmp.date')
 end function
 
 !INPUT -----------------------------------------------------------------
@@ -337,13 +324,16 @@ character(250) function update_filename(file_names, idate)
     implicit none
     character(len=*),intent(in) :: file_names
     character(len=*),intent(in) :: idate
-    character(len=4)  :: YYYY
-    character(len=3)  :: DDD
-    character(len=2)  :: MM, DD, HH
-    character(len=17) :: tmp
-    tmp=trim(date(idate,'%Y %m %d %j %H'))
-    read(tmp,*),YYYY,MM,DD,DDD,HH
+    type(datetime)              :: tmp
+    character(len=4) :: YYYY
+    character(len=3) :: DDD
+    character(len=2) :: MM, DD, HH
+    character(len=17) :: str
+    tmp=strptime(idate,'%Y-%m-%d %H:%M:%S')
+    str=tmp%strftime('%Y %m %d %j %H')
+    read(str,*),YYYY,MM,DD,DDD,HH
     update_filename=file_names
+    print*,yyyy,mm,dd,ddd,hh
     if ( index(met_files,"<date>") /= 0 ) update_filename=replace(update_filename, "<date>", YYYY//"-"//MM//"-"//DD)
     if ( index(met_files,"<time>") /= 0 ) update_filename=replace(update_filename, "<time>", HH//":00:00")           
 end function
@@ -450,7 +440,7 @@ subroutine get_daily_data(g,DDD)
    type(grid_type), intent(in) :: g
    character(len=3),intent(in) :: DDD                      
    integer ::ncid,var_id
-!@DEBUG   integer :: t_dim_id,x_dim_id,y_dim_id,k !debug
+   !@DEBUG   integer :: t_dim_id,x_dim_id,y_dim_id,k !debug
   
     print*,"   Prep. daily data.."
     !from prepmegan:

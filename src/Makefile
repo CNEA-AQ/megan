@@ -7,7 +7,7 @@ INC =-I/usr/include
 FCFLAGS=-O2 -ffree-line-length-none -w #-Wunused #-Wall 
 LDFLAGS=-O2
 
-OBJS=prep_megan.o megan_voc.o megan_nox.o megan_driver.o #bdsnp.o
+OBJS=datetime_module.o prep_megan.o megan_voc.o megan_nox.o megan_driver.o #bdsnp.o
 EXE =../exe/megan_v3.3.exe
 
 $(EXE): $(OBJS)
