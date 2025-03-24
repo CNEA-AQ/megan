@@ -40,7 +40,7 @@ program main
 
    !Variables: 
    integer :: iostat
-   integer :: t,i!,j,k
+   integer :: t,i,s!,j,k
    integer :: ierr
 
    type(grid_type) :: grid
@@ -71,22 +71,27 @@ program main
    real, allocatable, dimension(:,:,:) :: tmp24, rad24, wnd24                       !(x,y,24) last 24 hs vars values (temp, ppfd & wind)
 
    !output vars:
-   real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all          !(x,y,nclass,t)
+   real,    allocatable, dimension(:,:,:,:) :: out_buffer,out_buffer_all,out_buffer_emis   !(x,y,nclass,t)
 
    !megan namelist variables:
    character(len=19) :: start_date, end_date
 
-   character(len=16) :: mechanism='CBM05'            !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
+   character(len=16) :: mechanism='CB05'            !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
    character(4)      :: lsm                          !land surface model used on meteo: NOAH, JN90
    character(250)    :: met_files                    !path to wrf meteo files
+   character(250)    :: wrf_static_file                   !path to wrf static file
    character(250)    :: static_file='prep_mgn_static.nc',dynamic_file='prep_mgn_dynamic.nc' !prep-megan files
-   logical           :: prep_megan=.false., run_bdsnp=.false., use_meteo_lai=.false.   !flags 
+   logical           :: prep_megan_flag=.false., run_bdsnp=.false., use_meteo_lai=.false.   !flags 
+   !flower and litter emission flag; Hui Wang
+   logical           :: run_flower=.false., run_litter=.false.
 
    !prep-megan namelist variables:
    character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
 
    !---read namelist variables and parameters
-   namelist/megan_nl/start_date,end_date,met_files,lsm,mechanism,static_file,dynamic_file,prep_megan,run_bdsnp,use_meteo_lai
+   namelist/megan_nl/start_date,end_date,met_files,wrf_static_file,&
+                     lsm,mechanism,static_file,dynamic_file,prep_megan_flag,&
+                     run_flower, run_litter, run_bdsnp,use_meteo_lai
    namelist/prep_megan_nl/ griddesc,gridname,eco_glb,ctf_glb,lai_glb,GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
 
    read(*,nml=megan_nl, iostat=iostat)
@@ -99,7 +104,7 @@ program main
 inquire(file=trim(static_file ), exist=fileExists) !check if prep_megan files already present
 inquire(file=trim(dynamic_file), exist=fileExists) !check if prep_megan files already present
 
-if ( prep_megan .or. (.not. fileExists) ) then
+if ( prep_megan_flag .or. (.not. fileExists) ) then
 
    read(*,nml=prep_megan_nl, iostat=iostat)        !Leo namelist (prep megan)
    if( iostat /= 0 ) then
@@ -137,6 +142,7 @@ end if
    !--- Allocate output buffers
    allocate(out_buffer_all(grid%nx,grid%ny,n_spca_spc,0:23))!24)) !main out array
    allocate(out_buffer(grid%nx,grid%ny,NCLASS,0:23))        !24)) !non-dimensional emision rates of each megan species categories
+   allocate(out_buffer_emis(grid%nx,grid%ny,NCLASS,0:23))        !24)) !emission rates of each megan species categories
    !=== 
    print '(/" Init. temporal loop.. ")'
 
@@ -156,9 +162,19 @@ end if
       if ( current_day /= DD .or. current_date_s == end_date_s ) then                     !when new day begins:
 
          if ( current_day /= "99" ) then
+            !calculate the emission rates for MEGAN groups
+            do s = 0,23
+                out_buffer_emis(:,:,:,s) = out_buffer(:,:,:,s)*ef
+            end do 
+            call write_output_file_megan(grid,current_year,current_month,current_day)     !write MEGAN group output file
             call mgn2mech(grid%nx,grid%ny,24,ef,out_buffer,out_buffer_all, cell_area)     !convert to mechanism species before write the output
             call write_output_file(grid,current_year,current_month,current_day,MECHANISM) !write output file
-            if ( current_date_s == end_date_s ) stop 'MEGAN finished succesfully.';
+            if ( current_date_s == end_date_s ) then
+                 !deallocate(out_buffer)
+                 deallocate(out_buffer_all)
+                 deallocate(out_buffer_emis)
+                 stop 'MEGAN finished succesfully.'
+            end if
          endif
 
          call GET_DAILY_DATA(grid,DDD)                                                    !get daily data
@@ -167,7 +183,7 @@ end if
             current_month=MM
             call GET_MONTHLY_DATA(grid,MM)                                                !get monthly data
          endif    
-         out_buffer=0.0;out_buffer_all=0.0!;times_array=""
+         out_buffer=0.0;out_buffer_all=0.0;out_buffer_emis=0.0!;times_array=""
       endif    
       current_day=DD;current_jday=DDD;current_month=MM;current_year=YYYY                  !update current date
  
@@ -192,7 +208,8 @@ end if
              ctf, ef, ldf_in,                            & !Canopy type frac. [1], Emission Factors [ug m-2 h-1], light-dependent fraction [1]
              lsm,stype,smois,                            & !land surface model, soil typ category, soil moisture 
              tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,  & !max temp, min temp, max wind, daily avg of temp & ppfd
-             out_buffer(:,:,:,atoi(HH))                  ) !Emis Flux array [mole m-2 s-1]
+             out_buffer(:,:,:,atoi(HH)),                 &
+             run_flower,run_litter                  ) !Emis Flux array [mole m-2 s-1]
 
       !----------------------                                                              ! run megan_nox 
       !soil NO model:
@@ -356,7 +373,7 @@ subroutine get_static_data(g)
      allocate(    arid(g%nx,g%ny            ))
      allocate(non_arid(g%nx,g%ny            ))
      allocate(landtype(g%nx,g%ny            ))
-     print '("   Reading: ",A50))',trim(static_file)//":LAND" !static_file !land_file !debug
+     print '("   Reading: ",A50)',trim(static_file)//":LAND" !static_file !land_file !debug
      !LAND                                                                               
      call check(nf90_open(trim(static_file), nf90_write, ncid ))
         call check( nf90_inq_varid(ncid,'LANDTYPE', var_id )); call check( nf90_get_var(ncid, var_id, LANDTYPE ))
@@ -365,7 +382,7 @@ subroutine get_static_data(g)
      call check(nf90_close(ncid))
   endif
   !CTS, EFS, LDF 
-   print '("   Reading: ",A50))',trim(static_file) !debug
+   print '("   Reading: ",A50)',trim(static_file) !debug
   call check(nf90_open(trim(static_file), nf90_write, ncid ))
      call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
       call check( nf90_inq_varid(ncid,'CTF', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1,1],[g%nx,g%ny,1,NRTYP]))
@@ -374,12 +391,14 @@ subroutine get_static_data(g)
   call check(nf90_close(ncid))
 
   !From meteo:
-  print '("   Reading: ",A50))',met_file !debug
+  print '("   Reading: ",A50)',wrf_static_file !debug
   if (.not. allocated(stype))   allocate(  stype(g%nx,g%ny))
   if (.not. allocated(mapfac))  allocate( mapfac(g%nx,g%ny))
-  call check(nf90_open(trim(met_file), nf90_write, ncid ))
-      call check(nf90_inq_varid(ncid,'ISLTYP'  , var_id)); call check(nf90_get_var(ncid, var_id,  stype, [1,1,1], [g%nx,g%ny,1]  ))
-      call check(nf90_inq_varid(ncid,'MAPFAC_M', var_id)); call check(nf90_get_var(ncid, var_id, MAPFAC, [1,1,1], [g%nx,g%ny,1]  ))
+  call check(nf90_open(trim(wrf_static_file), nf90_write, ncid ))
+      call check(nf90_inq_varid(ncid,'ISLTYP'  , var_id));
+      call check(nf90_get_var(ncid, var_id,  stype, [1,1,1], [g%nx,g%ny,1]  ))
+      call check(nf90_inq_varid(ncid,'MAPFAC_M', var_id)); 
+      call check(nf90_get_var(ncid, var_id, mapfac, [1,1,1], [g%nx,g%ny,1]  ))
   call check(nf90_close(ncid))
 end subroutine
 
@@ -402,19 +421,28 @@ subroutine get_hourly_data(g,t,h)
   if (.not. allocated(wind) ) allocate( wind(g%nx,g%ny))
 
   call check(nf90_open(trim(met_file), nf90_write, ncid ))
+    print*, '(Reading: U10)'
     call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id,  U10, [1,1,t]  ))
+    print*, '(Reading: V10)'
     call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id,  V10, [1,1,t]  ))
+    print*, '(Reading: T2)'
     call check( nf90_inq_varid(ncid,'T2'    , var_id)); call check(nf90_get_var(ncid, var_id,  TMP, [1,1,t]  ))
+    print*, '(Reading: SWDOWN)'
     call check( nf90_inq_varid(ncid,'SWDOWN', var_id)); call check(nf90_get_var(ncid, var_id, PPFD, [1,1,t]  ))
+    print*, '(Reading: PSFC)'
     call check( nf90_inq_varid(ncid,'PSFC'  , var_id)); call check(nf90_get_var(ncid, var_id,  PRE, [1,1,t]  ))
+    print*, '(Reading: Q2)'
     call check( nf90_inq_varid(ncid,'Q2'    , var_id)); call check(nf90_get_var(ncid, var_id,  HUM, [1,1,t]  ))
+    print*, '(Reading: RAINNC)'
     call check( nf90_inq_varid(ncid,'RAINNC', var_id)); call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
     if ( use_meteo_lai ) then
       if (.not. allocated(lai)  ) allocate(  lai(g%nx,g%ny))
       call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  LAI, [1,1,t]  ))
     endif
     !call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t]))
+    print*, '(Reading: SMOIS)'
     call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,2,t]))
+    print*, '(Reading: TSLB)'
     call check( nf90_inq_varid(ncid,'TSLB'  , var_id)); call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t]))
   call check(nf90_close(ncid))
               
@@ -541,65 +569,165 @@ subroutine get_monthly_data(g,MM)!,lai,ndep)
 end subroutine
 
 !OUTPUT ----------------------------------------------------------------
-subroutine write_output_file(g,YYYY,MM,DD,MECHANISM)
+subroutine write_output_file_megan(g, yyyy, mm, dd)
   implicit none
-  type(grid_type) , intent(in) :: g
-  character(len=5), intent(in) :: MECHANISM
-  character(len=4), intent(in) :: YYYY
-  character(len=2), intent(in) :: MM,DD
-  !local vars
-  integer             :: ncid,var_id,t_dim_id,x_dim_id,y_dim_id,z_dim_id,str_dim_id,s_dim_id,var_dim_id
-  integer             :: k!,i,j
-  character(len=50)   :: out_file
-  character(len=10)   :: current_date
-                        
-   current_date=YYYY//"-"//MM//"-"//DD
-   !File name
-   out_file="emis_bio_"//current_date//"_"//trim(MECHANISM)//".nc"
-   print '(/" Writing out file: ",A/)',trim(out_file)
+  type(grid_type), intent(in) :: g
+  character(len=4), intent(in) :: yyyy
+  character(len=2), intent(in) :: mm, dd
 
-   !Crear NetCDF
-   call check(nf90_create(trim(out_file), NF90_CLOBBER, ncid))
-     !Defino dimensiones
-     call check(nf90_def_dim(ncid, "DateStrLen", 19, str_dim_id    ))
-     call check(nf90_def_dim(ncid, "time", 24     , t_dim_id       ))
-     call check(nf90_def_dim(ncid, "x"   , g%nx   , x_dim_id       ))
-     call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
+  integer :: ncid, t_dim_id, x_dim_id, y_dim_id, str_dim_id
+  integer :: var_id_lat, var_id_lon, var_id_area, var_id_time, k,t
+  integer, allocatable :: var_id_mech(:)
+  character(len=50) :: out_file
+  character(len=10) :: current_date
+  real, allocatable :: temp(:,:,:)
 
-     !Defino variables
-     call check(nf90_def_var(ncid,"lat"  , NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
-     call check(nf90_def_var(ncid,"lon"  , NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
-     call check(nf90_def_var(ncid,"cell_area", NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
-     !time
-     call check(nf90_def_var(ncid,"time" ,NF90_INT       , [t_dim_id], var_id  ));
-     call check(nf90_put_att(ncid, var_id,"units"        , "seconds since "//current_date//" 00:00:00 UTC" ));  !"%Y-%m-%d %H:%M:%S"
-     call check(nf90_put_att(ncid, var_id,"long_name"    , "time"              ));
-     call check(nf90_put_att(ncid, var_id,"axis"         , "T"                 ));
-     call check(nf90_put_att(ncid, var_id,"calendar"     , "standard"          ));
-     call check(nf90_put_att(ncid, var_id,"standard_name", "time"              ));
+  allocate(temp(g%nx, g%ny,24))
+  allocate(var_id_mech(nclass))
 
-     !Creo variables:
-     do k=1,NMGNSPC !n_scon_spc !
-        call check( nf90_def_var(ncid, trim(mech_spc(k)) , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-        !call check( nf90_put_att(ncid, var_id, "units"      , "mole m-2 s-1"       ))
-        !call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision flux"      ))
-        call check( nf90_put_att(ncid, var_id, "units"      , "mole s-1"          ))   !if multiplied by cell_area
-        call check( nf90_put_att(ncid, var_id, "var_desc"   , trim(mech_spc(k))//" emision rate"      )) 
-     end do
-   call check(nf90_enddef(ncid))   !End NetCDF define mode
+  current_date = yyyy // "-" // mm // "-" // dd
+  out_file = "emis_bio_" // current_date // "_MEGAN_Group.nc"
+  print '(/" writing out file: ",a/)', trim(out_file)
 
-   !Abro NetCDF y guardo variables de salida
-   call check(nf90_open(trim(out_file), nf90_write, ncid       ))
-     call check(nf90_inq_varid(ncid,"lat"      ,var_id)); call check(nf90_put_var(ncid, var_id, lat ))
-     call check(nf90_inq_varid(ncid,"lon"      ,var_id)); call check(nf90_put_var(ncid, var_id, lon ))
-     call check(nf90_inq_varid(ncid,"cell_area",var_id)); call check(nf90_put_var(ncid, var_id, cell_area ))
-     call check(nf90_inq_varid(ncid,"time",var_id))     ; call check(nf90_put_var(ncid, var_id, [ (60*60*k,k=0,23 ) ] ))
-     do k=1,NMGNSPC !n_scon_spc !,NMGNSPC
-       !print*,"    Especie:",trim(mech_spc(k)) !debug
-       call check(nf90_inq_varid(ncid,trim(mech_spc(k)),var_id)); call check(nf90_put_var(ncid, var_id, out_buffer_all(:,:,k,:) )) 
-     enddo
-   call check(nf90_close( ncid ))
+  temp = 0.0
+  ! create and define netcdf file
+  call check(nf90_create(trim(out_file), nf90_clobber, ncid))
+
+  call check(nf90_def_dim(ncid, "datestrlen", 19, str_dim_id))
+  call check(nf90_def_dim(ncid, "time", 24, t_dim_id))
+  call check(nf90_def_dim(ncid, "west_east", g%nx, x_dim_id))
+  call check(nf90_def_dim(ncid, "south_north", g%ny, y_dim_id))
+
+  ! define variables explicitly
+  call check(nf90_def_var(ncid, "lat", nf90_float, [x_dim_id, y_dim_id], var_id_lat))
+  call check(nf90_put_att(ncid, var_id_lat, "units", "degrees_north"))
+  call check(nf90_put_att(ncid, var_id_lat, "long_name", "latitude"))
+
+  call check(nf90_def_var(ncid, "lon", nf90_float, [x_dim_id, y_dim_id], var_id_lon))
+  call check(nf90_put_att(ncid, var_id_lon, "units", "degrees_east"))
+  call check(nf90_put_att(ncid, var_id_lon, "long_name", "longitude"))
+
+  call check(nf90_def_var(ncid, "cell_area", nf90_float, [x_dim_id, y_dim_id], var_id_area))
+  call check(nf90_put_att(ncid, var_id_area, "units", "m2"))
+  call check(nf90_put_att(ncid, var_id_area, "long_name", "longitude"))
+
+
+  call check(nf90_def_var(ncid, "time", nf90_int, [t_dim_id], var_id_time))
+  call check(nf90_put_att(ncid, var_id_time, "units", &
+             "seconds since "//current_date//" 00:00:00 utc"))
+  call check(nf90_put_att(ncid, var_id_time, "long_name", "time"))
+  call check(nf90_put_att(ncid, var_id_time, "axis", "t"))
+  call check(nf90_put_att(ncid, var_id_time, "calendar", "standard"))
+  call check(nf90_put_att(ncid, var_id_time, "standard_name", "time"))
+
+  do k = 1, nclass
+    call check(nf90_def_var(ncid, trim(mgn_spc(k)), nf90_float, &
+                            [x_dim_id, y_dim_id, t_dim_id], var_id_mech(k)))
+    call check(nf90_put_att(ncid, var_id_mech(k), "units", "nmole m-2 s-1"))
+    call check(nf90_put_att(ncid, var_id_mech(k), "var_desc", &
+                            trim(mgn_spc(k))//" emission rate"))
+  end do
+
+  call check(nf90_enddef(ncid))
+
+  ! write data directly (no reopening)
+  call check(nf90_put_var(ncid, var_id_lat,  lat))
+  call check(nf90_put_var(ncid, var_id_lon,  lon))
+  call check(nf90_put_var(ncid, var_id_area, cell_area))
+  call check(nf90_put_var(ncid, var_id_time, [(3600*(k-1), k=1,24)]))
+
+  do k = 1, nclass
+    print*, "writing species:", trim(mgn_spc(k))
+    temp(:,:,:) = out_buffer_emis(:,:,k,:)
+    call check(nf90_put_var(ncid, var_id_mech(k), temp))
+  end do
+
+  call check(nf90_close(ncid))
+
+  deallocate(var_id_mech)
+  deallocate(temp)
+end subroutine write_output_file_megan
+
+subroutine write_output_file(g, yyyy, mm, dd, mechanism)
+  implicit none
+  type(grid_type), intent(in) :: g
+  character(len=5), intent(in) :: mechanism
+  character(len=4), intent(in) :: yyyy
+  character(len=2), intent(in) :: mm, dd
+
+  integer :: ncid, t_dim_id, x_dim_id, y_dim_id, str_dim_id
+  integer :: var_id_lat, var_id_lon, var_id_area, var_id_time, k,t
+  integer, allocatable :: var_id_mech(:)
+  character(len=50) :: out_file
+  character(len=10) :: current_date
+  real, allocatable :: temp(:,:,:)
+
+  allocate(temp(g%nx, g%ny,24))
+  allocate(var_id_mech(nmgnspc))
+
+  current_date = yyyy // "-" // mm // "-" // dd
+  out_file = "emis_bio_" // current_date // "_" // trim(mechanism) // ".nc"
+  print '(/" writing out file: ",a/)', trim(out_file)
+
+  temp = 0.0
+  ! create and define netcdf file
+  call check(nf90_create(trim(out_file), nf90_clobber, ncid))
+
+  call check(nf90_def_dim(ncid, "datestrlen", 19, str_dim_id))
+  call check(nf90_def_dim(ncid, "time", 24, t_dim_id))
+  call check(nf90_def_dim(ncid, "west_east", g%nx, x_dim_id))
+  call check(nf90_def_dim(ncid, "south_north", g%ny, y_dim_id))
+
+  ! define variables explicitly
+  call check(nf90_def_var(ncid, "lat", nf90_float, [x_dim_id, y_dim_id], var_id_lat))
+  call check(nf90_put_att(ncid, var_id_lat, "units", "degrees_north"))
+  call check(nf90_put_att(ncid, var_id_lat, "long_name", "latitude"))
+
+  call check(nf90_def_var(ncid, "lon", nf90_float, [x_dim_id, y_dim_id], var_id_lon))
+  call check(nf90_put_att(ncid, var_id_lon, "units", "degrees_east"))
+  call check(nf90_put_att(ncid, var_id_lon, "long_name", "longitude"))
+
+  call check(nf90_def_var(ncid, "cell_area", nf90_float, [x_dim_id, y_dim_id], var_id_area))
+  call check(nf90_put_att(ncid, var_id_area, "units", "m2"))
+  call check(nf90_put_att(ncid, var_id_area, "long_name", "longitude"))
+
+
+  call check(nf90_def_var(ncid, "time", nf90_int, [t_dim_id], var_id_time))
+  call check(nf90_put_att(ncid, var_id_time, "units", &
+             "seconds since "//current_date//" 00:00:00 utc"))
+  call check(nf90_put_att(ncid, var_id_time, "long_name", "time"))
+  call check(nf90_put_att(ncid, var_id_time, "axis", "t"))
+  call check(nf90_put_att(ncid, var_id_time, "calendar", "standard"))
+  call check(nf90_put_att(ncid, var_id_time, "standard_name", "time"))
+
+  do k = 1, nmgnspc
+    call check(nf90_def_var(ncid, trim(mech_spc(k)), nf90_float, &
+                            [x_dim_id, y_dim_id, t_dim_id], var_id_mech(k)))
+    call check(nf90_put_att(ncid, var_id_mech(k), "units", "mole s-1"))
+    call check(nf90_put_att(ncid, var_id_mech(k), "var_desc", &
+                            trim(mech_spc(k))//" emission rate"))
+  end do
+
+  call check(nf90_enddef(ncid))
+
+  ! write data directly (no reopening)
+  call check(nf90_put_var(ncid, var_id_lat,  lat))
+  call check(nf90_put_var(ncid, var_id_lon,  lon))
+  call check(nf90_put_var(ncid, var_id_area, cell_area))
+  call check(nf90_put_var(ncid, var_id_time, [(3600*(k-1), k=1,24)]))
+
+  do k = 1, nmgnspc
+    print*, "writing species:", trim(mech_spc(k))
+    temp(:,:,:) = out_buffer_all(:,:,k,:)
+    call check(nf90_put_var(ncid, var_id_mech(k), temp))
+  end do
+
+  call check(nf90_close(ncid))
+
+  deallocate(var_id_mech)
+  deallocate(temp)
 end subroutine write_output_file
+
 
 !CHEM MECHANISM --------------------------------------------------------
 subroutine select_megan_mechanism(mechanism)
@@ -695,14 +823,16 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis,area)
     real, intent(in)    :: non_dim_emis(ncols,nrows,nclass,ntimes)
     real, intent(inout) :: emis(ncols,nrows,n_spca_spc,ntimes)
     real, intent(in)    :: efmaps(ncols,nrows,19) !only 19
-    real, intent(in)    :: area(ncols,nrows) !only 19
+    real, intent(in)    :: area(ncols,nrows)
     !mgn2mech variables:
     integer :: nmpmg,nmpsp,nmpmc,s,t
-    real    :: tmper(ncols, nrows, n_spca_spc,ntimes)       ! Temp emission buffer
+    real, allocatable :: tmper(:,:,:,:)
+    !real    :: tmper(ncols, nrows, n_spca_spc, ntimes)       ! Temp emission buffer
 
-    print '("   > Exec. mgn2mech")'
-    tmper = 0.
-    emis = 0.
+    allocate(tmper(ncols, nrows, n_spca_spc, ntimes))
+    print*, '   > Exec. mgn2mech'
+    tmper(:,:,:,:) = 0.
+    emis(:,:,:,:) = 0.
     
     do s = 1, n_smap_spc
       nmpmg = mg20_map(s) !megan category  [1-19]
@@ -723,6 +853,6 @@ subroutine mgn2mech(ncols,nrows,ntimes,efmaps,non_dim_emis,emis,area)
           emis(:,:,nmpmc,:) = emis(:,:,nmpmc,:) +  (tmper(:,:,nmpsp,:) * conv_fac(s)) 
        endif
      enddo ! End species loop
+     deallocate(tmper)
 end subroutine mgn2mech
-
 end program main

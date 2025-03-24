@@ -395,7 +395,9 @@ end subroutine
       call check(nf90_inq_varid(ncid,"lon"  ,var_id)); call check(nf90_put_var(ncid, var_id, lon ) )
       call check(nf90_inq_varid(ncid,"lat"  ,var_id)); call check(nf90_put_var(ncid, var_id, lat ) )    
       !LAIv
-      call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv/1000.0 ))
+      LAIv = LAIv/1000.0
+      call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv ))
+      !call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv/1000.0 ))
       if (run_BDSNP) then
         call check(nf90_inq_varid(ncid,"NDEP" ,var_id)); call check(nf90_put_var(ncid, var_id, NDEP        ))
         call check(nf90_inq_varid(ncid,"NFERT",var_id)); call check(nf90_put_var(ncid, var_id, NFERT       ))

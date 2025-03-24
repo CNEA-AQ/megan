@@ -32,7 +32,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
              ctf, efmaps, ldf_in,                          & !lai,emis factors, light emis factors
              lsm,soil_type,soil_moisture,                  & !land surface model, soil type, soil_moisture
              tmp_max, tmp_min, wind_max, tmp_avg, ppfd_avg, & !meteo daily
-             non_dimgarma) !emis                           ) !out: Emision values
+             non_dimgarma,flower_flag,litter_flag) !emis                           ) !out: Emision values
 
     implicit none
     ! input variables
@@ -48,6 +48,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
     character(len=4),intent(in)   :: LSM          !land surface model 
     integer, intent(in)     ::  soil_type(ncols,nrows)
     real,    intent(in)     ::  soil_moisture(ncols,nrows)
+    logical, intent(in)     :: flower_flag,litter_flag
 
     ! output variables 
     !real   ,intent(inout) :: emis(ncols,nrows,n_spca_spc)
@@ -103,6 +104,10 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
     real  :: gamco2      ! EA response to CO2
     real  :: gamtp       ! combines GAMLD, GAMLI, GAMP to get canopy average
     real  :: ldfmap      ! light depenedent fraction map
+    !account for flower and litter emission as the relative emission factor
+    real  :: gam_nonleaf       ! account for non-leaf emissions 
+    real, parameter :: gamflower = 0.02 !2% of the leaf level
+    real, parameter :: gamlitter  = 0.03!3% of the leaf level
 
     REAL :: VPGWT(LAYERS)
     REAL :: SUM1,SUM2,Ea1L,Ea2L
@@ -288,6 +293,17 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
             ELSE IF ( S .EQ. 13 ) THEN   
                 ER = ER * GAMBD  ! GAMBD only applied to ethanol and acetaldehyde
             END IF
+
+            gam_nonleaf = 1.
+            ! add flower emission
+            if (flower_flag) then
+                gam_nonleaf = gam_nonleaf+gamflower
+            end if
+            ! add litter emission
+            if (litter_flag) then
+                gam_nonleaf = gam_nonleaf+gamlitter
+            end if
+            er = er * gam_nonleaf
 
             !IF ( ER(I,J) .GT. 0.0 ) THEN
             IF ( ER .GT. 0.0 ) THEN
@@ -719,12 +735,12 @@ SUBROUTINE CanopyRad(Distgauss, Layers, LAI, SinZenith,           &
       INTEGER,INTENT(IN) :: Layers, NrCha, NrTyp, Cantype
       REAL,INTENT(IN) :: Qbeamv,Qdiffv,SinZenith,LAI,Qbeamn,Qdiffn
       REAL,DIMENSION(Layers),INTENT(IN) :: Distgauss
+      REAL,DIMENSION(NrCha,NrTyp),INTENT(IN) :: Canopychar
       ! output
       REAL,INTENT(OUT) :: QbAbsV, QbAbsn
       REAL,DIMENSION(Layers),INTENT(OUT) :: ShadePPFD, SunPPFD, &
                     QdAbsv, QsAbsv, QsAbsn, ShadeQv,  SunQn,  &
                     QdAbsn, SunQv, ShadeQn, Sunfrac 
-      REAL,DIMENSION(NrCha,NrTyp),INTENT(OUT) :: Canopychar
       ! internal variables
       INTEGER :: i
       REAL :: ScatV, ScatN, RefldV, RefldN, ReflbV, ReflbN,     & 
