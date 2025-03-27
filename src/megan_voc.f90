@@ -1,6 +1,7 @@
 module voc_mod
    
    use netcdf
+   use, intrinsic :: ieee_arithmetic
 
    implicit none
    !private
@@ -239,10 +240,6 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
         !from megsea -----------
         !EA response to Soil Moisture
         IF ( gamsm_yn )  THEN; gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) ); ELSE;  gamsm = 1.0; ENDIF 
-        !wilt_map(i,j)=wwlt(soil_type(i,j)) !debug
-        !gamsm_map(i,j)=gamsm               !debug
-
-        !from megvea -----------
         ! Emission response to canopy depth
         cdea(:)=gamma_cd(layers,laic(i,j))  
         ! EA bidirectional exchange LAI response
@@ -255,6 +252,11 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
             ! Light Dependent Emission Factors (LDF)
             IF ( S .EQ. 3 .OR. S .EQ. 4 .OR. S .EQ. 5 .OR. S .EQ. 6 ) THEN
                 LDFMAP = LDF_IN(i,j,S-2) ! only LDF 3, 4, 5, and 6 in file
+                !Just incase unreal number
+                if (LDFMAP .lt. 0 .or. LDFMAP .gt. 1.)then
+                     
+                     LDFMAP = LDF(S) !For these species,  Read LDF from previous MEGVEA.EXT 
+                end if
             ELSE
                 LDFMAP = LDF(S) !For these species,  Read LDF from previous MEGVEA.EXT 
             ENDIF
@@ -294,6 +296,15 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
                 ER = ER * GAMBD  ! GAMBD only applied to ethanol and acetaldehyde
             END IF
 
+            !if (.not. ieee_is_finite(ER)) then
+            !    print *,'x-y-s',i,j,s,' is_infinity'
+            !    print *,'SUM1',SUM1
+            !    print *,'SUM2',SUM1
+            !    print *,'LDFMAP',LDFMAP
+       
+            !    print *,'GAMLA',GAMLA
+            !end if
+
             gam_nonleaf = 1.
             ! add flower emission
             if (flower_flag) then
@@ -305,12 +316,15 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
             end if
             er = er * gam_nonleaf
 
+
+
             !IF ( ER(I,J) .GT. 0.0 ) THEN
             IF ( ER .GT. 0.0 ) THEN
                 non_dimgarma(i,j,s) = ER
             ELSE                  
                 non_dimgarma(i,j,s) = 0.0
             END IF
+
         end do  ! End loop of species (S)
 
      end do ! NCOLS

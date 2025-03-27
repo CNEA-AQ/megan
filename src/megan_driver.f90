@@ -61,7 +61,7 @@ program main
    real   , allocatable, dimension(:,:)     :: cell_area                     !(x,y)   <- from prep_megan
    integer, allocatable, dimension(:,:)     :: arid,non_arid,landtype        !(x,y)   <- from prep_megan
    real,    allocatable, dimension(:,:,:)   :: ctf,ef,ldf_in                 !(x,y,*) <- from prep_megan
-   real,    allocatable, dimension(:,:)     :: lai,ndep,fert                 !(x,y,t) <- from prep_megan
+   real,    allocatable, dimension(:,:)     :: laip,laic,ndep,fert                 !(x,y,t) <- from prep_megan
 
    !intermediate vars:
    logical :: fileExists=.false.
@@ -204,7 +204,7 @@ end if
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),      & !date: year, julian day, hour.
              grid%nx,grid%ny,lat,lon,                    & !dimensions (ncols,nrows) & coordinates
              tmp,ppfd,wind,pre,hum,                      & !Tmp.[ºK], Photosynthetic Photon Flux Density [W/m2], Wind spd.[m/s], Press.[Pa], Humdty.[m3/m3]
-             lai, lai,                                   & !LAI (past) [1], LAI (current) [1]
+             laip, laic,                                   & !LAI (past) [1], LAI (current) [1]
              ctf, ef, ldf_in,                            & !Canopy type frac. [1], Emission Factors [ug m-2 h-1], light-dependent fraction [1]
              lsm,stype,smois,                            & !land surface model, soil typ category, soil moisture 
              tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,  & !max temp, min temp, max wind, daily avg of temp & ppfd
@@ -221,7 +221,7 @@ end if
                  lat,                                    & !latitude coordinates
                  tmp,rain,                               & !temperature [ºK], precipitation rate [mm]
                  lsm,stype,stemp,smois,                  & !land-surface-model, soil_type_clasification, soil temperature [ºK], soil mositure [m3/m3]
-                 ctf, lai,                               & !canopy type fraction [1], leaf-area-index [1]
+                 ctf, laic,                               & !canopy type fraction [1], leaf-area-index [1]
                  out_buffer(:,:,i_NO,atoi(HH))           ) !emision flux array [mole m-2 s-1]
       endif
       !laip=laic
@@ -436,8 +436,10 @@ subroutine get_hourly_data(g,t,h)
     print*, '(Reading: RAINNC)'
     call check( nf90_inq_varid(ncid,'RAINNC', var_id)); call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
     if ( use_meteo_lai ) then
-      if (.not. allocated(lai)  ) allocate(  lai(g%nx,g%ny))
-      call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  LAI, [1,1,t]  ))
+      if (.not. allocated(laip)  ) allocate(  laip(g%nx,g%ny))
+      if (.not. allocated(laic)  ) allocate(  laic(g%nx,g%ny))
+      call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  laip, [1,1,t]  ))
+      call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  laic, [1,1,t]  ))
     endif
     !call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t]))
     print*, '(Reading: SMOIS)'
@@ -547,17 +549,24 @@ subroutine get_daily_data(g,DDD)
 
 end subroutine
 
-subroutine get_monthly_data(g,MM)!,lai,ndep)
+subroutine get_monthly_data(g,mm)!,lai,ndep)
   implicit none
   type(grid_type)   :: g
-  character(len=2)  :: MM
+  character(len=2)  :: mm
   integer           :: ncid,var_id,m
-  m=atoi(MM)
+  m=atoi(mm)
   print*,"   Prep. monthly data.."
   if ( .not. use_meteo_lai ) then
-     if (.not. allocated(lai) ) then; allocate( lai(g%nx,g%ny));endif
+     if (.not. allocated(laip) ) then; allocate( laip(g%nx,g%ny));endif
+     if (.not. allocated(laic) ) then; allocate( laic(g%nx,g%ny));endif
      call check(nf90_open( trim(dynamic_file), nf90_write, ncid ))
-          call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, LAI, [1,1,m], [g%nx,g%ny,1]   ))
+          !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, LAI, [1,1,m], [g%nx,g%ny,1]   ))
+          call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laic, [1,1,m], [g%nx,g%ny,1]   ))
+          if (m .eq. 1)then
+                call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,12], [g%nx,g%ny,1]   ))
+          else
+                call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,m-1], [g%nx,g%ny,1]   ))
+          end if
      call check(nf90_close(ncid))
   endif
   if ( run_bdsnp ) then

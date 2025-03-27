@@ -149,12 +149,12 @@ subroutine prep_static_data(g,p,lat,lon,area,ctf_file, ecotype_file, GtEcoEF_fil
     ! EFs:
     call check(nf90_def_var(ncid, "EFS" , NF90_FLOAT, [x_dim_id,y_dim_id,ef_dim_id], var_id))
     call check(nf90_put_att(ncid, var_id,"long_name", "EMISSION_FACTOR"                    ))
-    call check(nf90_put_att(ncid, var_id,"units"    , "nanomol m-2 s-1"                    )) !Q: Are this the correct units? Are the same for LDF?
+    call check(nf90_put_att(ncid, var_id,"units"    , "nanomol m-2 s-1"                    )) 
     call check(nf90_put_att(ncid, var_id,"var_desc" , "Emission Factors ISOP,MBO,MT_PINE,MT_ACYC,MT_CAMP,MT_SABI,MT_AROM,NO,SQT_HR,SQT_LR,MEOH,ACTO,ETOH,ACID,LVOC,OXPROD,STRESS,OTHER,CO" ))
     ! LDF:
     call check(nf90_def_var(ncid, "LDF" , NF90_FLOAT, [x_dim_id,y_dim_id,ldf_dim_id], var_id))
     call check(nf90_put_att(ncid, var_id,"long_name", "LIGHT DEPENDENT EMISSION_FACTOR"    ))
-    call check(nf90_put_att(ncid, var_id,"units"    , "nanomol m-2 s-1"                    )) !Q: Are this the correct units? Are the same for LDF?
+    call check(nf90_put_att(ncid, var_id,"units"    , "fraction"                    ))
     call check(nf90_put_att(ncid, var_id,"var_desc" , "Ligth Dependent Emissions Factors: LDF01,...LDF04" ))
     if (run_BDSNP) then
        print*,"Building BDSNP_ARID, BDSNP_NONARID & BDSNP_LANDTYPE ..."
