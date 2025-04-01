@@ -40,10 +40,12 @@ module prep_megan
   integer :: iostat,i,j,k
 contains
 
-subroutine prep(griddesc, gridname,                                          &
+subroutine prep(griddesc, gridname,nlai,lai_scale_factor,                    &
                 ecotypes_file, growtype_file, laiv_file, GtEcoEF_file,       &
                 run_BDSNP, nitro_file, fert_file, climate_file, landtype_file)
   implicit none
+  integer, intent(in) :: nlai
+  real,    intent(in) :: lai_scale_factor
   character(200), intent(in) :: griddesc,gridname,ecotypes_file,growtype_file,laiv_file,climate_file,fert_file,landtype_file,nitro_file,GtEcoEF_file
   logical       ,intent(in)  :: run_BDSNP
 
@@ -80,7 +82,7 @@ subroutine prep(griddesc, gridname,                                          &
        ! `landtype` (BDSNP): land type classification
 
   !Time/date dependent data:
-  call prep_dynamic_data(grid,proj,latitude,longitude,laiv_file,nitro_file,fert_file,run_BDSNP) 
+  call prep_dynamic_data(grid,proj,latitude,longitude,laiv_file,nlai,lai_scale_factor,nitro_file,fert_file,run_BDSNP) 
        ! `LAI`     monthly.         : Leaf Area Index
        ! `N_DEP:`  monthly. (BDSNP) : Nitrogen deposition   flux
        ! `N_FERT:` daily.   (BDSNP) : Nitrogen feritization flux
@@ -275,10 +277,12 @@ end subroutine
  !----------------------------------
  !  DYNAMIC DATA:
  !---------------------------------
- subroutine prep_dynamic_data(g,p,lat,lon,laiv_file,nitro_file, fert_file,run_BDSNP)
+ subroutine prep_dynamic_data(g,p,lat,lon,laiv_file,nlai,lai_scale_factor,nitro_file, fert_file,run_BDSNP)
     implicit none
     type(grid_type) ,intent(in) :: g
     type(proj_type) ,intent(in) :: p
+    integer,         intent(in) :: nlai
+    real,            intent(in) :: lai_scale_factor
     character(len=19) :: outfile='prep_mgn_dynamic.nc'
     logical :: run_BDSNP
     !LAIv
@@ -303,29 +307,36 @@ end subroutine
     print '("prep dynamic file: ",A19,"..")',outFile
  
      !----
-     !LAI: 
-     print*,"LAI"
-     !
-     !Idea for implementing 8-day LAIv: just read global_var (NVARS) and depending of this read & write the output.
-     call check(nf90_open(laiv_file,nf90_nowrite, ncid) )
-     call check(nf90_get_att(ncid, NF90_GLOBAL, "temporal_average", temporal_avg) )
-     call check(nf90_close(ncid))
-     if ( trim(temporal_avg) == "monthly") then
-        nvars=12
-     else if ( trim(temporal_avg) == "8-day") then
-        nvars=46
-     else
-        print*,"Couldn't get temporal_average (8-day or monthly) global attribute from LAI file",temporal_avg;stop
-     endif
-
-     allocate( LAIv(g%nx,g%ny,nvars))  
-     do k=1,nvars
-         write(kk,'(I0.2)') k
-         LAIv(:,:,k)=interpolate(p,g,inp_file=laiv_file,varname="laiv"//kk, method="bilinear") 
-     enddo
-     where ( LAIv < 0.0 )
-             LAIv=0.0
-     endwhere
+    !LAI: 
+    print*,"LAI"
+    !
+    !Idea for implementing 8-day LAIv: just read global_var (NVARS) and depending of this read & write the output.
+    call check(nf90_open(laiv_file,nf90_nowrite, ncid) )
+    !call check(nf90_get_att(ncid, NF90_GLOBAL, "temporal_average", temporal_avg) )
+    call check(nf90_close(ncid))
+    !if ( trim(temporal_avg) == "monthly") then
+    !   nvars=12
+    !else if ( trim(temporal_avg) == "8-day") then
+    !   nvars=46
+    !else if ( trim(temporal_avg) == "10-day") then
+    !   nvars=36
+    !else
+    !   print*,"Couldn't get temporal_average (8-day or monthly) global attribute from LAI file",temporal_avg;stop
+    !endif
+    nvars = nlai
+    print*,"NLAI:",nvars
+    allocate( LAIv(g%nx,g%ny,nvars))  
+    do k=1,nvars
+        write(kk,'(I0.2)') k
+        if (nvars .eq. 12) then
+        LAIv(:,:,k)=interpolate(p,g,inp_file=laiv_file,varname="laiv"//kk, method="bilinear") 
+        else
+        LAIv(:,:,k)=interpolate(p,g,inp_file=laiv_file,varname="lai"//kk, method="bilinear") 
+        end if
+    enddo
+    where ( LAIv < 0.0 )
+            LAIv=0.0
+    endwhere
                        
     if (run_BDSNP) then
        !----
@@ -368,8 +379,8 @@ end subroutine
        call check(nf90_def_var(ncid, "cell_area" , NF90_FLOAT, [x_dim_id,y_dim_id], var_id))  !cell area
        !LAI
        call check(nf90_def_var(ncid, "LAI" , NF90_FLOAT, [x_dim_id,y_dim_id,date_dim_id],var_id))
-       call check(nf90_put_att(ncid, var_id,"long_name", "LAIv"            ))
-       call check(nf90_put_att(ncid, var_id,"units"    , "1"               ))
+       call check(nf90_put_att(ncid, var_id,"long_name", "LAI"            ))
+       call check(nf90_put_att(ncid, var_id,"units"    , "m2 m-2"               ))
        call check(nf90_put_att(ncid, var_id,"var_desc" , "Leaf Area Index" ))
        if (run_BDSNP) then
           !NDEP
@@ -395,7 +406,7 @@ end subroutine
       call check(nf90_inq_varid(ncid,"lon"  ,var_id)); call check(nf90_put_var(ncid, var_id, lon ) )
       call check(nf90_inq_varid(ncid,"lat"  ,var_id)); call check(nf90_put_var(ncid, var_id, lat ) )    
       !LAIv
-      LAIv = LAIv/1000.0
+      LAIv = LAIv*lai_scale_factor
       call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv ))
       !call check(nf90_inq_varid(ncid,"LAI"  ,var_id)); call check(nf90_put_var(ncid, var_id, LAIv/1000.0 ))
       if (run_BDSNP) then
@@ -845,7 +856,7 @@ function interpolate(p,g,inp_file,varname,method)       result(img2)
  end function
 
 
-subroutine get_Cropped_Img(p,g,inp_file,varname,img,GC)
+subroutine get_cropped_img(p,g,inp_file,varname,img,GC)
    implicit none
    type(grid_type), intent(in)  :: g  !desired grid
    type(proj_type), intent(in)  :: p  !proj of desired grid

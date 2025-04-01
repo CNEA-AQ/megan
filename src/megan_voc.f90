@@ -107,17 +107,13 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
     real  :: ldfmap      ! light depenedent fraction map
     !account for flower and litter emission as the relative emission factor
     real  :: gam_nonleaf       ! account for non-leaf emissions 
-    real, parameter :: gamflower = 0.02 !2% of the leaf level
+    real, parameter :: gamflower  = 0.02!2% of the leaf level
     real, parameter :: gamlitter  = 0.03!3% of the leaf level
 
-    REAL :: VPGWT(LAYERS)
-    REAL :: SUM1,SUM2,Ea1L,Ea2L
-    !@!!debug variables:
-    !@!integer :: ierr,var_id,ncid,col_dim_id,row_dim_id,lvl_dim_id
-    !@!  diagnostic variables:
-    !@!real ::  wilt_map(ncols,nrows)
-    !@!real :: gamsm_map(ncols,nrows)       ! EA response to soil moisture
-    !@!real ::    ER_map(ncols,nrows)       !emission rate
+    real :: VPGWT(LAYERS)
+    real :: SUM1,SUM2,Ea1L,Ea2L
+    real :: laiv=0.
+
  
     print*,"   > Exec. megan_voc"
 
@@ -197,7 +193,14 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
 
                 !(4) canopy radiation dist (ppdf)
                 !
-                call CanopyRad(VPgausDis, layers, LAIc(i,j), SinZenith,       & !in
+                laiv = LAIc(i,j)/TotalCT
+                !make sure the laiv is not geater than 7.
+                if (laiv .gt. 7.) then
+                        laiv=7.
+                end if
+
+                !call CanopyRad(VPgausDis, layers, LAIc(i,j), SinZenith,       & !in
+                call CanopyRad(VPgausDis, layers, laiv, SinZenith,       & !in
                       Qbeamv, Qdiffv, Qbeamn, Qdiffn, k, Canopychar, sun_frac,& !in
                       QbAbsV, QdAbsV, QsAbsV, QbAbsn, QdAbsn, QsAbsn, SunQv,  & !in
                       ShadeQv, SunQn, ShadeQn, sun_ppfd, shade_ppfd,          & !out
@@ -241,7 +244,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
         !EA response to Soil Moisture
         IF ( gamsm_yn )  THEN; gamsm=gamma_sm(soil_type(i,j),soil_moisture(i,j),wwlt(soil_type(i,j)) ); ELSE;  gamsm = 1.0; ENDIF 
         ! Emission response to canopy depth
-        cdea(:)=gamma_cd(layers,laic(i,j))  
+        !cdea(:)=gamma_cd(layers,laic(i,j))  
+        cdea(:)=gamma_cd(layers,laiv)  
         ! EA bidirectional exchange LAI response
         if ( gambd_yn )  then; gambd=gamma_laibidir(laic(i,j)); else;  gambd = 1.0; endif
         ! EA response to co2

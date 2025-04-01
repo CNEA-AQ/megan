@@ -41,7 +41,7 @@ program main
    !Variables: 
    integer :: iostat
    integer :: t,i,s!,j,k
-   integer :: ierr
+   integer :: ierr,lai_num
 
    type(grid_type) :: grid
 
@@ -87,38 +87,45 @@ program main
 
    !prep-megan namelist variables:
    character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
+   character(3)   :: nlai='12'
+   real           :: lai_scale_factor=0.1
 
    !---read namelist variables and parameters
    namelist/megan_nl/start_date,end_date,met_files,wrf_static_file,&
                      lsm,mechanism,static_file,dynamic_file,prep_megan_flag,&
                      run_flower, run_litter, run_bdsnp,use_meteo_lai
-   namelist/prep_megan_nl/ griddesc,gridname,eco_glb,ctf_glb,lai_glb,GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
+   namelist/prep_megan_nl/ griddesc,gridname,nlai,lai_scale_factor,&
+                          eco_glb,ctf_glb,lai_glb,&
+                          GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
 
    read(*,nml=megan_nl, iostat=iostat)
+   read(*,nml=prep_megan_nl, iostat=iostat)        !Leo namelist (prep megan)
+
+
    if( iostat /= 0 ) then
      write(*,*) 'megan: failed to read namelist; error = ',iostat
      stop
    end if
+   lai_num = atoi(nlai) 
+   !PREP-MEGAN-------------------------------------------------------------
+   inquire(file=trim(static_file ), exist=fileExists) !check if prep_megan files already present
+   inquire(file=trim(dynamic_file), exist=fileExists) !check if prep_megan files already present
 
-!PREP-MEGAN-------------------------------------------------------------
-inquire(file=trim(static_file ), exist=fileExists) !check if prep_megan files already present
-inquire(file=trim(dynamic_file), exist=fileExists) !check if prep_megan files already present
-
-if ( prep_megan_flag .or. (.not. fileExists) ) then
-
-   read(*,nml=prep_megan_nl, iostat=iostat)        !Leo namelist (prep megan)
-   if( iostat /= 0 ) then
-     write(*,*) 'prepmegan: failed to read namelist; error = ',iostat
+   if ( prep_megan_flag .or. (.not. fileExists) ) then
+   
+      if( iostat /= 0 ) then
+        write(*,*) 'prepmegan: failed to read namelist; error = ',iostat
+        stop
+      end if
+   
+     print '("========================",/," Runing PREP-MEGAN")'
+     call prep(griddesc,gridname,lai_num,lai_scale_factor,&
+              eco_glb,ctf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb)
+   
+     print '("Files ",A19," and ",A19," has been created by prep_megan")',static_file,dynamic_file
+     print '("Re run it to execute MEGAN.                             ")'
      stop
    end if
-
-  print '("========================",/," Runing PREP-MEGAN")'
-  call prep(griddesc,gridname,eco_glb,ctf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb)
-
-  print '("Files ",A19," and ",A19," has been created by prep_megan")',static_file,dynamic_file
-  print '("Re run it to execute MEGAN.                             ")'
-  stop
-end if
 
 !MAIN ------------------------------------------------------------------
    print '(" ==========================" )' 
@@ -177,12 +184,15 @@ end if
             end if
          endif
 
-         call GET_DAILY_DATA(grid,DDD)                                                    !get daily data
+         call get_daily_data(grid,DDD)                                                    !get daily data
+         
 
-         if ( current_month /= MM ) then                                                  !when new month begins:
-            current_month=MM
-            call GET_MONTHLY_DATA(grid,MM)                                                !get monthly data
-         endif    
+         call get_monthly_data(grid,MM,DDD,lai_num)                                                !get monthly data
+
+         !if ( current_month /= MM ) then                                                  !when new month begins:
+         !   current_month=MM
+         !   call get_monthly_data(grid,MM,DDD,)                                                !get monthly data
+         !endif    
          out_buffer=0.0;out_buffer_all=0.0;out_buffer_emis=0.0!;times_array=""
       endif    
       current_day=DD;current_jday=DDD;current_month=MM;current_year=YYYY                  !update current date
@@ -198,7 +208,7 @@ end if
          end if
       end if
 
-      call GET_HOURLY_DATA(grid,t,atoi(HH)+1)                                             !get hourly meteo data
+      call get_hourly_data(grid,t,atoi(HH)+1)                                             !get hourly meteo data
 
       !----------------------                                                             !run megan_voc
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),      & !date: year, julian day, hour.
@@ -224,7 +234,6 @@ end if
                  ctf, laic,                               & !canopy type fraction [1], leaf-area-index [1]
                  out_buffer(:,:,i_NO,atoi(HH))           ) !emision flux array [mole m-2 s-1]
       endif
-      !laip=laic
 
       current_date_s  = current_date_s + timedelta(hours=1)               !Define next expected date
 
@@ -384,7 +393,7 @@ subroutine get_static_data(g)
   !CTS, EFS, LDF 
    print '("   Reading: ",A50)',trim(static_file) !debug
   call check(nf90_open(trim(static_file), nf90_write, ncid ))
-     call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
+      call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
       call check( nf90_inq_varid(ncid,'CTF', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1,1],[g%nx,g%ny,1,NRTYP]))
       call check( nf90_inq_varid(ncid,"EFS", var_id )); call check( nf90_get_var(ncid, var_id , EF ))   !new v3.3
       call check( nf90_inq_varid(ncid,"LDF", var_id )); call check( nf90_get_var(ncid, var_id , LDF ))  !new v3.3
@@ -549,23 +558,31 @@ subroutine get_daily_data(g,DDD)
 
 end subroutine
 
-subroutine get_monthly_data(g,mm)!,lai,ndep)
+subroutine get_monthly_data(g,mm,ddd,nlai)!,lai,ndep)
   implicit none
   type(grid_type)   :: g
   character(len=2)  :: mm
-  integer           :: ncid,var_id,m
+  character(len=3)  :: ddd
+  integer, intent(in) :: nlai
+  integer           :: ncid,var_id,m,doy,indx,time_interval
   m=atoi(mm)
+  doy = atoi(ddd)
+  time_interval = int(365/nlai)
+  indx = ceiling(real(doy)/real(nlai)) 
+
   print*,"   Prep. monthly data.."
   if ( .not. use_meteo_lai ) then
      if (.not. allocated(laip) ) then; allocate( laip(g%nx,g%ny));endif
      if (.not. allocated(laic) ) then; allocate( laic(g%nx,g%ny));endif
      call check(nf90_open( trim(dynamic_file), nf90_write, ncid ))
           !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, LAI, [1,1,m], [g%nx,g%ny,1]   ))
-          call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laic, [1,1,m], [g%nx,g%ny,1]   ))
-          if (m .eq. 1)then
-                call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,12], [g%nx,g%ny,1]   ))
+          !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laic, [1,1,m], [g%nx,g%ny,1]   ))
+          call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laic, [1,1,indx], [g%nx,g%ny,1]   ))
+          if (indx .eq. 1)then
+                !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,12], [g%nx,g%ny,1]   ))
+                call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,nlai], [g%nx,g%ny,1]   ))
           else
-                call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,m-1], [g%nx,g%ny,1]   ))
+                call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,indx-1], [g%nx,g%ny,1]   ))
           end if
      call check(nf90_close(ncid))
   endif
