@@ -34,7 +34,7 @@ program main
 
    !Strucs/Extended Types
    type grid_type
-       integer  :: nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
+       integer  :: gx0,gy0,nx,ny,nz,nt  !number of cells in x-y direction (ncols, nrows, nlevs, ntimes)
        real     :: dx,dy     
    end type grid_type
 
@@ -76,12 +76,15 @@ program main
    !megan namelist variables:
    character(len=19) :: start_date, end_date
 
-   character(len=16) :: mechanism='CB05'            !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
-   character(4)      :: lsm                          !land surface model used on meteo: NOAH, JN90
-   character(250)    :: met_files                    !path to wrf meteo files
-   character(250)    :: wrf_static_file                   !path to wrf static file
-   character(250)    :: static_file='prep_mgn_static.nc',dynamic_file='prep_mgn_dynamic.nc' !prep-megan files
-   logical           :: prep_megan_flag=.false., run_bdsnp=.false., use_meteo_lai=.false.   !flags 
+   character(len=16) :: mechanism='CB05'     !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
+   character(4)      :: lsm                  !land surface model used on meteo: NOAH, JN90
+   character(250)    :: met_files            !path to wrf meteo files
+   character(250)    :: wrf_static_file      !path to wrf static file
+   character(250)    :: static_file='prep_mgn_static.nc'   !prep-megan file1
+   character(250)    :: dynamic_file='prep_mgn_dynamic.nc' !prep-megan file2
+   logical           :: prep_megan_flag=.false.
+   logical           :: run_bdsnp=.false.
+   logical           :: use_meteo_lai=.false.   !flags 
    !flower and litter emission flag; Hui Wang
    logical           :: run_flower=.false., run_litter=.false.
 
@@ -89,6 +92,9 @@ program main
    character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
    character(3)   :: nlai='12'
    real           :: lai_scale_factor=0.1
+   !region defined parameters
+   integer        :: x0,y0,ncolsin,nrowsin
+
 
    !---read namelist variables and parameters
    namelist/megan_nl/start_date,end_date,met_files,wrf_static_file,&
@@ -97,16 +103,23 @@ program main
    namelist/prep_megan_nl/ griddesc,gridname,nlai,lai_scale_factor,&
                           eco_glb,ctf_glb,lai_glb,&
                           GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
-
+   namelist/windowdefs/ x0,y0,ncolsin,nrowsin
+   !reading megan namelist
    read(*,nml=megan_nl, iostat=iostat)
-   read(*,nml=prep_megan_nl, iostat=iostat)        !Leo namelist (prep megan)
-
+   !reading prep_megan namelist
+   read(*,nml=prep_megan_nl, iostat=iostat)
+   read(*,nml=windowdefs, iostat=iostat)
 
    if( iostat /= 0 ) then
      write(*,*) 'megan: failed to read namelist; error = ',iostat
      stop
    end if
-   lai_num = atoi(nlai) 
+   !prepare variables
+   lai_num = atoi(nlai)
+   grid%gx0 = x0 
+   grid%gy0 = y0 
+   grid%nx  = ncolsin 
+   grid%ny  = nrowsin 
    !PREP-MEGAN-------------------------------------------------------------
    inquire(file=trim(static_file ), exist=fileExists) !check if prep_megan files already present
    inquire(file=trim(dynamic_file), exist=fileExists) !check if prep_megan files already present
@@ -133,7 +146,7 @@ program main
    print '("     ║║║║╣ ║ ╦╠═╣║║║       " )'
    print '("     ╩ ╩╚═╝╚═╝╩ ╩╝╚╝ (v3.3)" )'
    print '(" ==========================" )'
-   !---
+   !--------------------------------------------------------------------
    print '(/" Select chemical mechanism and species.. ")'
    call select_megan_mechanism(mechanism)
    print '("  - Mecanism: ",A6,/,"  - Species: ", I3)',mechanism, size(megan_names)!,n_spca_spc
@@ -301,14 +314,19 @@ subroutine get_grid_parameters(meteo_file,g,lat,lon,times)
    real, allocatable, dimension(:,:),intent(inout) :: lat,lon
    character(19), allocatable, intent(inout), dimension(:) :: times
    integer :: ncid,dimid,varid,time_len,i,t
+   integer :: x_num,y_num
 
    !get parameters from meteo (WRF) file:
    call check(nf90_open(trim(meteo_file), nf90_write, ncid ))
       !grid dimensions
       call check (nf90_inq_dimid(ncid,'west_east'  ,  dimId   ))
-      call check (nf90_inquire_dimension(ncid, dimId,len=g%nx ))
+      call check (nf90_inquire_dimension(ncid, dimId,len=x_num ))
+      if ((g%gx0 + g%nx -1) .gt. x_num) stop "Sub-domain exceeds the grid boundary on X (west_east) direction"
       call check (nf90_inq_dimid(ncid,'south_north',  dimId   ))
-      call check (nf90_inquire_dimension(ncid, dimId,len=g%ny ))
+      call check (nf90_inquire_dimension(ncid, dimId,len=y_num ))
+      if ((g%gy0 + g%ny -1) .gt. y_num) stop "Sub-domain exceeds the grid boundary on Y (south_north) direction"
+      
+
       call check (nf90_inq_dimid(ncid,'bottom_top' ,  dimId   ))
       call check (nf90_inquire_dimension(ncid, dimId,len=g%nz ))
   
@@ -318,8 +336,10 @@ subroutine get_grid_parameters(meteo_file,g,lat,lon,times)
       !lat lon coordinates
       if (.not. allocated(lat)  ) allocate(lat(g%nx,g%ny))
       if (.not. allocated(lon)  ) allocate(lon(g%nx,g%ny))
-      call check( nf90_inq_varid(ncId,'XLAT' , varId)); call check(nf90_get_var(ncId, varId, lat   ))
-      call check( nf90_inq_varid(ncId,'XLONG', varId)); call check(nf90_get_var(ncId, varId, lon   ))
+      call check( nf90_inq_varid(ncId,'XLAT' , varId))
+      call check( nf90_get_var(ncId, varId, lat, start=[g%gx0,g%gy0], count=[g%nx,g%ny]))
+      call check( nf90_inq_varid(ncId,'XLONG', varId))
+      call check( nf90_get_var(ncId, varId, lon, start=[g%gx0,g%gy0], count=[g%nx,g%ny]))
    call check(nf90_close(ncid))
    !Times array:
    call get_Times(meteo_file, Times)
@@ -431,30 +451,41 @@ subroutine get_hourly_data(g,t,h)
 
   call check(nf90_open(trim(met_file), nf90_write, ncid ))
     print*, '(Reading: U10)'
-    call check( nf90_inq_varid(ncid,'U10'   , var_id)); call check(nf90_get_var(ncid, var_id,  U10, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'U10'   , var_id))
+    call check( nf90_get_var(ncid, var_id,  U10, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     print*, '(Reading: V10)'
-    call check( nf90_inq_varid(ncid,'V10'   , var_id)); call check(nf90_get_var(ncid, var_id,  V10, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'V10'   , var_id))
+    call check( nf90_get_var(ncid, var_id,  V10, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     print*, '(Reading: T2)'
-    call check( nf90_inq_varid(ncid,'T2'    , var_id)); call check(nf90_get_var(ncid, var_id,  TMP, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'T2'    , var_id))!; call check(nf90_get_var(ncid, var_id,  TMP, [1,1,t]  ))
+    call check( nf90_get_var(ncid, var_id,  TMP, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     print*, '(Reading: SWDOWN)'
-    call check( nf90_inq_varid(ncid,'SWDOWN', var_id)); call check(nf90_get_var(ncid, var_id, PPFD, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'SWDOWN', var_id))!; call check(nf90_get_var(ncid, var_id, PPFD, [1,1,t]  ))
+    call check( nf90_get_var(ncid, var_id,  PPFD, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     print*, '(Reading: PSFC)'
-    call check( nf90_inq_varid(ncid,'PSFC'  , var_id)); call check(nf90_get_var(ncid, var_id,  PRE, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'PSFC'  , var_id))!; call check(nf90_get_var(ncid, var_id,  PRE, [1,1,t]  ))
+    call check( nf90_get_var(ncid, var_id,  PRE, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     print*, '(Reading: Q2)'
-    call check( nf90_inq_varid(ncid,'Q2'    , var_id)); call check(nf90_get_var(ncid, var_id,  HUM, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'Q2'    , var_id))!; call check(nf90_get_var(ncid, var_id,  HUM, [1,1,t]  ))
+    call check( nf90_get_var(ncid, var_id,  HUM, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     print*, '(Reading: RAINNC)'
-    call check( nf90_inq_varid(ncid,'RAINNC', var_id)); call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
+    call check( nf90_inq_varid(ncid,'RAINNC', var_id))!; call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
+    call check( nf90_get_var(ncid, var_id,  RAIN, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     if ( use_meteo_lai ) then
       if (.not. allocated(laip)  ) allocate(  laip(g%nx,g%ny))
       if (.not. allocated(laic)  ) allocate(  laic(g%nx,g%ny))
-      call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  laip, [1,1,t]  ))
-      call check( nf90_inq_varid(ncid,'LAI'   , var_id)); call check(nf90_get_var(ncid, var_id,  laic, [1,1,t]  ))
+      call check( nf90_inq_varid(ncid,'LAI'   , var_id))!; call check(nf90_get_var(ncid, var_id,  laip, [1,1,t]  ))
+      call check( nf90_get_var(ncid, var_id,  laip, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+      call check( nf90_inq_varid(ncid,'LAI'   , var_id))!; call check(nf90_get_var(ncid, var_id,  laic, [1,1,t]  ))
+      call check( nf90_get_var(ncid, var_id,  laic, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
     endif
     !call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t]))
     print*, '(Reading: SMOIS)'
-    call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,2,t]))
+    call check( nf90_inq_varid(ncid,'SMOIS' , var_id))!; call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,2,t]))
+    call check( nf90_get_var(ncid, var_id,  SMOIS, start=[g%gx0,g%gy0,2,t], count=[g%nx,g%ny,1,1]  ))
     print*, '(Reading: TSLB)'
-    call check( nf90_inq_varid(ncid,'TSLB'  , var_id)); call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t]))
+    call check( nf90_inq_varid(ncid,'TSLB'  , var_id))!; call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t]))
+    call check( nf90_get_var(ncid, var_id,  STEMP, start=[g%gx0,g%gy0,1,t], count=[g%nx,g%ny,1,1]  ))
   call check(nf90_close(ncid))
               
   wind=sqrt(u10*u10 + v10*v10)

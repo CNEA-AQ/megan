@@ -55,13 +55,13 @@ Edit the namelist `namelist_megan` that contains the following variables:
 /
 &prep_megan_nl
    griddesc='GRIDDESC',                        !GRIDDESC file (describing grid and proj)
-   gridname='MERC_TEST',!'LCC_TAN_TEST',       !gridname to use in GRIDDESC file
-   nlai    ='12'                               !number of LAI records (e.g., 12 means monthly)
-   lai_scale_factor  =0.001                    !scale factor for LAI data
+   gridname='M_04_08CA',!'LCC_TAN_TEST',       !gridname to use in GRIDDESC file
+   nlai    ='36'                               !number of LAI records (e.g., 12 means monthly)
+   lai_scale_factor  =0.1                      !scale factor for LAI data
 
    eco_glb='input/veg_Ecotypes.nc',            ! global ecotype
    ctf_glb='input/veg_GrowthFormFracions.nc',  ! global canopy type fraction
-   lai_glb='input/veg_LAIv.nc',                ! global leaf area index
+   lai_glb='input/LAI_Climatology_2010-2019.nc',                ! global leaf area index
 
    clim_glb='input/soil_climate.nc',           ! global arid/nonarid soils
    land_glb='input/soil_landtype.nc',          ! global land type data
@@ -69,6 +69,13 @@ Edit the namelist `namelist_megan` that contains the following variables:
    fert_glb='input/soil_fert.nc',              ! global N-fertilization flux
 
    GtEcoEF="db/GtEFbyEcotype.csv",             !Emission factor of each GT grouped by Ecotype
+/
+
+&windowdefs
+   x0         =  3,            !start point for west_east grids (lower_left corner)
+   y0         =  3,            !start point for south_north grids (lower-left corner)
+   ncolsin    =  321,          !numbers of west_east grids (longitude)
+   nrowsin    =  291,          !numbers of south_north grids (latitude)
 /
 ```
 
