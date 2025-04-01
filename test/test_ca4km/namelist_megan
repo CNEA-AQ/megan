@@ -1,0 +1,44 @@
+&megan_nl
+  start_date='2021-05-28 00:00:00',   ! YYYY-MM-DD HH:MM:SS
+  end_date  ='2021-05-29 00:00:00',   ! YYYY-MM-DD HH:MM:SS
+  
+  !met_files='wrfout_d01_<date>_00:00:00',            ! Meteo file path
+  met_files='wrfout_d03_<date>_00_00_00',            ! Meteo file path
+  wrf_static_file = 'wrfout_d03_2021-05-28_00_00_00'
+  LSM='NOAH',                         ! Land Surface Model (LSM) used in meteo
+
+  mechanism='CB05',                   !'RACM2','CB05',CB6_ae7','CRACMM','SAPRC07',
+  
+   static_file='prep_mgn_static.nc',  ! NetCDF file w/ CTF, EFs, LDF & LAND  layers (created by prep_megan)
+  dynamic_file='prep_mgn_dynamic.nc', ! NetCDF file w/ LAI, NDEP & NFERT leyers     (created by prep_megan)
+
+  run_flower = .true.
+  run_litter = .true.
+  run_bdsnp = .false. ,               ! run bdsnp soil model for NO emissions?
+  prep_megan_flag = .false.,               ! run prep_megan?
+/
+
+&prep_megan_nl
+   griddesc='GRIDDESC_Kai',
+   gridname='M_04_08CA',
+   nlai= '36',
+   lai_scale_factor = 0.1,
+   
+   eco_glb='input/veg_Ecotypes.nc',
+   ctf_glb='input/veg_GrowthFormFracions.nc',
+   lai_glb='input/LAI_Climatology_2010-2019.nc',
+   
+   clim_glb='input/soil_climate.nc',
+   land_glb='input/soil_landtype.nc',
+   ndep_glb='input/soil_nitro.nc',
+   fert_glb='input/soil_fert.nc',
+
+   GtEcoEF="GtEFbyEcotype_new.csv",    !Emission factor of each GT grouped by Ecotype
+/
+
+&windowdefs
+   x0         =  3,            !start point for west_east grids (lower_left corner)
+   y0         =  3,            !start point for south_north grids (lower-left corner)
+   ncolsin    =  321,          !numbers of west_east grids (longitude)
+   nrowsin    =  291,          !numbers of south_north grids (latitude)
+/
