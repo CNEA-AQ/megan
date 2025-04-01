@@ -40,7 +40,7 @@ Edit the namelist `namelist_megan` that contains the following variables:
    end_date  ='2019-01-02 07:00:00',  !YYYY-MM-DD HH:MM:SS
 
    met_files='wrfout_d01_<date>_<time>', !Pattern of meteo files paths
-
+   wrf_static_file = 'wrfout_d03_2021-05-28_00_00_00'! static data for WRF
    LSM='NOAH',                         ! land surface model (LSM) used in meteo
 
   mechanism='CB05',                    !'RACM2','CB05',CB6_ae7','CRACMM','SAPRC07',
@@ -48,12 +48,16 @@ Edit the namelist `namelist_megan` that contains the following variables:
    static_file='prep_mgn_static.nc',   ! NetCDF file w/ CTF, EFs, LDF & LAND  layers (created by prep_megan)
   dynamic_file='prep_mgn_dynamic.nc',  ! NetCDF file w/ LAI, NDEP & NFERT leyers     (created by prep_megan)
 
-  run_bdsnp  = .false. ,               ! run bdsnp soil model for NO emissions?
+  run_flower = .true.,                 !flag for turning on/off flower emission
+  run_litter = .true.,                 !flag for turning on/off litter emission
+  run_bdsnp  = .false.,                ! run bdsnp soil model for NO emissions?
   prep_megan = .false.,                ! run prep_megan?
 /
 &prep_megan_nl
    griddesc='GRIDDESC',                        !GRIDDESC file (describing grid and proj)
    gridname='MERC_TEST',!'LCC_TAN_TEST',       !gridname to use in GRIDDESC file
+   nlai    ='12'                               !number of LAI records (e.g., 12 means monthly)
+   lai_scale_factor  =0.001                    !scale factor for LAI data
 
    eco_glb='input/veg_Ecotypes.nc',            ! global ecotype
    ctf_glb='input/veg_GrowthFormFracions.nc',  ! global canopy type fraction
