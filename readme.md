@@ -36,10 +36,10 @@ Edit the namelist `namelist_megan` that contains the following variables:
 
 ```fortran
 &megan_nl
-   start_date='2019-01-01 18:00:00',  !YYYY-MM-DD HH:MM:SS
-   end_date  ='2019-01-02 07:00:00',  !YYYY-MM-DD HH:MM:SS
+   start_date='2021-05-28 00:00:00',  !YYYY-MM-DD HH:MM:SS
+   end_date  ='2021-05-29 00:00:00',  !YYYY-MM-DD HH:MM:SS
 
-   met_files='wrfout_d01_<date>_<time>', !Pattern of meteo files paths
+   met_files='wrfout_d03_<date>_<time>', !Pattern of meteo files paths
    wrf_static_file = 'wrfout_d03_2021-05-28_00_00_00'! static data for WRF
    LSM='NOAH',                         ! land surface model (LSM) used in meteo
 
@@ -54,8 +54,6 @@ Edit the namelist `namelist_megan` that contains the following variables:
   prep_megan = .false.,                ! run prep_megan?
 /
 &prep_megan_nl
-   griddesc='GRIDDESC',                        !GRIDDESC file (describing grid and proj)
-   gridname='M_04_08CA',!'LCC_TAN_TEST',       !gridname to use in GRIDDESC file
    nlai    ='36'                               !number of LAI records (e.g., 12 means monthly)
    lai_scale_factor  =0.1                      !scale factor for LAI data
 
@@ -68,7 +66,7 @@ Edit the namelist `namelist_megan` that contains the following variables:
    ndep_glb='input/soil_nitro.nc',             ! global N-deposition flux
    fert_glb='input/soil_fert.nc',              ! global N-fertilization flux
 
-   GtEcoEF="db/GtEFbyEcotype.csv",             !Emission factor of each GT grouped by Ecotype
+   GtEcoEF="db/GtEFbyEcotype_growthform.csv",             !Emission factor of each GT grouped by Ecotype
 /
 
 &windowdefs
