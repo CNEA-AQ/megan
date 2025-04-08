@@ -19,8 +19,6 @@
 /
 
 &prep_megan_nl
-   griddesc='GRIDDESC_Kai',
-   gridname='M_04_08CA',
    nlai= '36',
    lai_scale_factor = 0.1,
    
@@ -33,7 +31,7 @@
    ndep_glb='input/soil_nitro.nc',
    fert_glb='input/soil_fert.nc',
 
-   GtEcoEF="GtEFbyEcotype_new.csv",    !Emission factor of each GT grouped by Ecotype
+   GtEcoEF="GtEFbyEcotype_growthform.csv",    !Emission factor of each GT grouped by Ecotype
 /
 
 &windowdefs

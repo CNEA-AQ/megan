@@ -14,7 +14,8 @@ DEBUG = -traceback
 FCFLAGS= $(DEBUG) -O2 -extend-source #-Wunused #-Wall 
 LDFLAGS= $(DEBUG) -O2
 
-OBJS=datetime_module.o prep_megan.o megan_voc.o megan_nox.o megan_driver.o #bdsnp.o
+OBJS= constants_module.o misc_definitions_module.o bio_types.o area_mapper_grw.o \
+      datetime_module.o prep_megan.o megan_voc.o megan_nox.o megan_driver.o #bdsnp.o
 EXE =../exe/megan_v3.3.exe
 
 $(EXE): $(OBJS)

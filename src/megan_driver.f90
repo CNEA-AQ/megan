@@ -1,8 +1,8 @@
 program main
    ! program:        MEGAN v3.3
    ! description:    biogenic VOCs emission model (by Alex Guenther)
-   ! authors:        Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, among others.
-   ! programmed by:  Ramiro A. Espada (from Lakes Environmental Software)
+   ! authors:        Alex Guenther, Ling Huang, Xuemei Wang, Jeff Willison, Hui Wang among others.
+   ! programmed by:  Ramiro A. Espada (from Lakes Environmental Software), Hui Wang (UC Irvine)
 
    use netcdf   
    use datetime_module, only: datetime, timedelta, strptime
@@ -89,18 +89,19 @@ program main
    logical           :: run_flower=.false., run_litter=.false.
 
    !prep-megan namelist variables:
-   character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
+   character(200) :: eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
+   !character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
    character(3)   :: nlai='12'
    real           :: lai_scale_factor=0.1
    !region defined parameters
    integer        :: x0,y0,ncolsin,nrowsin
-
+   integer        :: idxs(4)
 
    !---read namelist variables and parameters
    namelist/megan_nl/start_date,end_date,met_files,wrf_static_file,&
                      lsm,mechanism,static_file,dynamic_file,prep_megan_flag,&
                      run_flower, run_litter, run_bdsnp,use_meteo_lai
-   namelist/prep_megan_nl/ griddesc,gridname,nlai,lai_scale_factor,&
+   namelist/prep_megan_nl/ nlai,lai_scale_factor,&
                           eco_glb,ctf_glb,lai_glb,&
                           GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
    namelist/windowdefs/ x0,y0,ncolsin,nrowsin
@@ -119,7 +120,11 @@ program main
    grid%gx0 = x0 
    grid%gy0 = y0 
    grid%nx  = ncolsin 
-   grid%ny  = nrowsin 
+   grid%ny  = nrowsin
+   idxs(1)  = x0 
+   idxs(2)  = y0
+   idxs(3)  = ncolsin 
+   idxs(4)  = nrowsin
    !PREP-MEGAN-------------------------------------------------------------
    inquire(file=trim(static_file ), exist=fileExists) !check if prep_megan files already present
    inquire(file=trim(dynamic_file), exist=fileExists) !check if prep_megan files already present
@@ -132,8 +137,8 @@ program main
       end if
    
      print '("========================",/," Runing PREP-MEGAN")'
-     call prep(griddesc,gridname,lai_num,lai_scale_factor,&
-              eco_glb,ctf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb)
+     call prep(wrf_static_file,lai_num,lai_scale_factor,&
+              eco_glb,ctf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb,idxs)
    
      print '("Files ",A19," and ",A19," has been created by prep_megan")',static_file,dynamic_file
      print '("Re run it to execute MEGAN.                             ")'
@@ -227,7 +232,7 @@ program main
       call megan_voc(atoi(yyyy),atoi(ddd),atoi(hh),      & !date: year, julian day, hour.
              grid%nx,grid%ny,lat,lon,                    & !dimensions (ncols,nrows) & coordinates
              tmp,ppfd,wind,pre,hum,                      & !Tmp.[ºK], Photosynthetic Photon Flux Density [W/m2], Wind spd.[m/s], Press.[Pa], Humdty.[m3/m3]
-             laip, laic,                                   & !LAI (past) [1], LAI (current) [1]
+             laip, laic,                                 & !LAI (past) [1], LAI (current) [1]
              ctf, ef, ldf_in,                            & !Canopy type frac. [1], Emission Factors [ug m-2 h-1], light-dependent fraction [1]
              lsm,stype,smois,                            & !land surface model, soil typ category, soil moisture 
              tmp_max,tmp_min,wind_max,tmp_avg,ppfd_avg,  & !max temp, min temp, max wind, daily avg of temp & ppfd
