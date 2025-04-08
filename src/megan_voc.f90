@@ -144,7 +144,6 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
       do i = 1, NCOLS! preserve stride 1 for output arrays
 
         !from megcan -----------
-        !print*,"MEGCAN.."
         sunt(:) = temp(i,j) !default values
         shat(:) = temp(i,j)                
         sunp(:) = rad(i,j )                 
