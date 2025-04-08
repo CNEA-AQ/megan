@@ -76,7 +76,7 @@ program main
    !megan namelist variables:
    character(len=19) :: start_date, end_date
 
-   character(len=16) :: mechanism='CB05'     !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
+   character(len=20) :: mechanism='CB05'     !'CBM6','CB6A7','RACM2','CRACM','SAPRC','NOCON'
    character(4)      :: lsm                  !land surface model used on meteo: NOAH, JN90
    character(250)    :: met_files            !path to wrf meteo files
    character(250)    :: wrf_static_file      !path to wrf static file
@@ -154,7 +154,7 @@ program main
    !--------------------------------------------------------------------
    print '(/" Select chemical mechanism and species.. ")'
    call select_megan_mechanism(mechanism)
-   print '("  - Mecanism: ",A6,/,"  - Species: ", I3)',mechanism, size(megan_names)!,n_spca_spc
+   print '("  - Mecanism: ",A8,/,"  - Species: ", I3)',mechanism, size(megan_names)!,n_spca_spc
    print '(8(A6))',megan_names
    !---
    print '(/" Read meteo grid parameters, coordinates, and times.. ")'
@@ -699,7 +699,7 @@ contains
    subroutine write_output_file(g, yyyy, mm, dd, mechanism)
      implicit none
      type(grid_type), intent(in) :: g
-     character(len=5), intent(in) :: mechanism
+     character(len=20), intent(in) :: mechanism
      character(len=4), intent(in) :: yyyy
      character(len=2), intent(in) :: mm, dd
    
