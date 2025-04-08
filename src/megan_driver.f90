@@ -164,6 +164,9 @@ program main
    !--- 
    print '(/" Get static data.. ")'
    call get_static_data(grid)
+   !print*,ldf_in
+   !stop
+
    !--- Allocate output buffers
    allocate(out_buffer_all(grid%nx,grid%ny,n_spca_spc,0:23))!24)) !main out array
    allocate(out_buffer(grid%nx,grid%ny,NCLASS,0:23))        !24)) !non-dimensional emision rates of each megan species categories
@@ -394,11 +397,17 @@ contains
      type(grid_type) :: g
      integer         :: i,j,k
      integer         :: ncid, var_id
-     character(len=10),dimension(19) :: ef_vars=["EF_ISOP   ", "EF_MBO    ", "EF_MT_PINE", "EF_MT_ACYC", "EF_MT_CAMP", "EF_MT_SABI", "EF_MT_AROM", "EF_NO     ", "EF_SQT_HR ", "EF_SQT_LR ", "EF_MEOH   ", "EF_ACTO   ", "EF_ETOH   ", "EF_ACID   ", "EF_LVOC   ", "EF_OXPROD ", "EF_STRESS ", "EF_OTHER  ", "EF_CO     "]
+     character(len=10),dimension(19) :: ef_vars=["EF_ISOP   ", "EF_MBO    ", "EF_MT_PINE",&
+                                                 "EF_MT_ACYC", "EF_MT_CAMP", "EF_MT_SABI",&
+                                                 "EF_MT_AROM", "EF_NO     ", "EF_SQT_HR ",&
+                                                 "EF_SQT_LR ", "EF_MEOH   ", "EF_ACTO   ",&
+                                                 "EF_ETOH   ", "EF_ACID   ", "EF_LVOC   ",&
+                                                 "EF_OXPROD ", "EF_STRESS ", "EF_OTHER  ",&
+                                                 "EF_CO     "]
      character(len=5),dimension(4)   :: ldf_vars=["LDF03","LDF04","LDF05","LDF06"]
    
      !Allocation of variables to use
-     allocate(  cell_area(g%nx,g%ny) )
+     allocate(      cell_area(g%nx,g%ny)        )
      allocate(      ef(g%nx,g%ny,size( ef_vars)))
      allocate(  ldf_in(g%nx,g%ny,size(ldf_vars)))
      allocate(     ctf(g%nx,g%ny,NRTYP         ))
@@ -410,18 +419,30 @@ contains
         print '("   Reading: ",A50)',trim(static_file)//":LAND" !static_file !land_file !debug
         !LAND                                                                               
         call check(nf90_open(trim(static_file), nf90_write, ncid ))
-           call check( nf90_inq_varid(ncid,'LANDTYPE', var_id )); call check( nf90_get_var(ncid, var_id, LANDTYPE ))
-           call check( nf90_inq_varid(ncid,'ARID'    , var_id )); call check( nf90_get_var(ncid, var_id, ARID     ))
-           call check( nf90_inq_varid(ncid,'NONARID' , var_id )); call check( nf90_get_var(ncid, var_id, NON_ARID ))
+           call check( nf90_inq_varid(ncid,'LANDTYPE', var_id ))
+           call check( nf90_get_var(ncid, var_id, LANDTYPE ))
+
+           call check( nf90_inq_varid(ncid,'ARID'    , var_id ))
+           call check( nf90_get_var(ncid, var_id, ARID     ))
+
+           call check( nf90_inq_varid(ncid,'NONARID' , var_id ))
+           call check( nf90_get_var(ncid, var_id, NON_ARID ))
         call check(nf90_close(ncid))
      endif
      !CTS, EFS, LDF 
       print '("   Reading: ",A50)',trim(static_file) !debug
      call check(nf90_open(trim(static_file), nf90_write, ncid ))
-         call check( nf90_inq_varid(ncid,'cell_area', var_id )); call check(nf90_get_var(ncid,var_id,cell_area))
-         call check( nf90_inq_varid(ncid,'CTF', var_id )); call check(nf90_get_var(ncid,var_id,CTF,[1,1,1],[g%nx,g%ny,NRTYP]))
-         call check( nf90_inq_varid(ncid,"EFS", var_id )); call check( nf90_get_var(ncid, var_id , EF ))   !new v3.3
-         call check( nf90_inq_varid(ncid,"LDF", var_id )); call check( nf90_get_var(ncid, var_id , LDF ))  !new v3.3
+         call check( nf90_inq_varid(ncid,'cell_area', var_id ))
+         call check( nf90_get_var(ncid,var_id,cell_area))
+
+         call check( nf90_inq_varid(ncid,'CTF', var_id ))
+         call check( nf90_get_var(ncid,var_id,CTF,[1,1,1],[g%nx,g%ny,NRTYP]))
+
+         call check( nf90_inq_varid(ncid,"EFS", var_id ))
+         call check( nf90_get_var(ncid, var_id , ef ))   !new v3.3
+       
+         call check( nf90_inq_varid(ncid,"LDF", var_id ))
+         call check( nf90_get_var(ncid, var_id , ldf_in ))  !new v3.3
      call check(nf90_close(ncid))
    
      !From meteo:
@@ -429,9 +450,9 @@ contains
      if (.not. allocated(stype))   allocate(  stype(g%nx,g%ny))
      if (.not. allocated(mapfac))  allocate( mapfac(g%nx,g%ny))
      call check(nf90_open(trim(wrf_static_file), nf90_write, ncid ))
-         call check(nf90_inq_varid(ncid,'ISLTYP'  , var_id));
+         call check(nf90_inq_varid(ncid,'ISLTYP'  , var_id))
          call check(nf90_get_var(ncid, var_id,  stype, [1,1,1], [g%nx,g%ny,1]  ))
-         call check(nf90_inq_varid(ncid,'MAPFAC_M', var_id)); 
+         call check(nf90_inq_varid(ncid,'MAPFAC_M', var_id)) 
          call check(nf90_get_var(ncid, var_id, mapfac, [1,1,1], [g%nx,g%ny,1]  ))
      call check(nf90_close(ncid))
    end subroutine
@@ -458,38 +479,45 @@ contains
        print*, '(Reading: U10)'
        call check( nf90_inq_varid(ncid,'U10'   , var_id))
        call check( nf90_get_var(ncid, var_id,  U10, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        print*, '(Reading: V10)'
        call check( nf90_inq_varid(ncid,'V10'   , var_id))
        call check( nf90_get_var(ncid, var_id,  V10, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        print*, '(Reading: T2)'
-       call check( nf90_inq_varid(ncid,'T2'    , var_id))!; call check(nf90_get_var(ncid, var_id,  TMP, [1,1,t]  ))
+       call check( nf90_inq_varid(ncid,'T2'    , var_id))
        call check( nf90_get_var(ncid, var_id,  TMP, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        print*, '(Reading: SWDOWN)'
-       call check( nf90_inq_varid(ncid,'SWDOWN', var_id))!; call check(nf90_get_var(ncid, var_id, PPFD, [1,1,t]  ))
+       call check( nf90_inq_varid(ncid,'SWDOWN', var_id))
        call check( nf90_get_var(ncid, var_id,  PPFD, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        print*, '(Reading: PSFC)'
-       call check( nf90_inq_varid(ncid,'PSFC'  , var_id))!; call check(nf90_get_var(ncid, var_id,  PRE, [1,1,t]  ))
+       call check( nf90_inq_varid(ncid,'PSFC'  , var_id))
        call check( nf90_get_var(ncid, var_id,  PRE, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        print*, '(Reading: Q2)'
-       call check( nf90_inq_varid(ncid,'Q2'    , var_id))!; call check(nf90_get_var(ncid, var_id,  HUM, [1,1,t]  ))
+       call check( nf90_inq_varid(ncid,'Q2'    , var_id))
        call check( nf90_get_var(ncid, var_id,  HUM, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        print*, '(Reading: RAINNC)'
-       call check( nf90_inq_varid(ncid,'RAINNC', var_id))!; call check(nf90_get_var(ncid, var_id, RAIN, [1,1,t]  ))
+       call check( nf90_inq_varid(ncid,'RAINNC', var_id))
        call check( nf90_get_var(ncid, var_id,  RAIN, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
+       
        if ( use_meteo_lai ) then
          if (.not. allocated(laip)  ) allocate(  laip(g%nx,g%ny))
          if (.not. allocated(laic)  ) allocate(  laic(g%nx,g%ny))
-         call check( nf90_inq_varid(ncid,'LAI'   , var_id))!; call check(nf90_get_var(ncid, var_id,  laip, [1,1,t]  ))
+         call check( nf90_inq_varid(ncid,'LAI'   , var_id))
          call check( nf90_get_var(ncid, var_id,  laip, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
-         call check( nf90_inq_varid(ncid,'LAI'   , var_id))!; call check(nf90_get_var(ncid, var_id,  laic, [1,1,t]  ))
+         call check( nf90_inq_varid(ncid,'LAI'   , var_id))
          call check( nf90_get_var(ncid, var_id,  laic, start=[g%gx0,g%gy0,t], count=[g%nx,g%ny,1]  ))
        endif
-       !call check( nf90_inq_varid(ncid,'SMOIS' , var_id)); call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,1,t]))
        print*, '(Reading: SMOIS)'
-       call check( nf90_inq_varid(ncid,'SMOIS' , var_id))!; call check(nf90_get_var(ncid, var_id,SMOIS, [1,1,2,t]))
+       call check( nf90_inq_varid(ncid,'SMOIS' , var_id))
        call check( nf90_get_var(ncid, var_id,  SMOIS, start=[g%gx0,g%gy0,2,t], count=[g%nx,g%ny,1,1]  ))
+       
        print*, '(Reading: TSLB)'
-       call check( nf90_inq_varid(ncid,'TSLB'  , var_id))!; call check(nf90_get_var(ncid, var_id,STEMP, [1,1,1,t]))
+       call check( nf90_inq_varid(ncid,'TSLB'  , var_id))
        call check( nf90_get_var(ncid, var_id,  STEMP, start=[g%gx0,g%gy0,1,t], count=[g%nx,g%ny,1,1]  ))
      call check(nf90_close(ncid))
                  
@@ -503,7 +531,7 @@ contains
      if (.not. allocated(tmp24) ) allocate( tmp24(g%nx,g%ny,24))
      if (.not. allocated(rad24) ) allocate( rad24(g%nx,g%ny,24))
      if (.not. allocated(wnd24) ) allocate( wnd24(g%nx,g%ny,24))
-     !print*,"hora:",h
+
      tmp24(:,:,h) = tmp
      rad24(:,:,h) = ppfd
      wnd24(:,:,h) = wind
@@ -522,7 +550,8 @@ contains
        if ( run_bdsnp ) then
           if (.not. allocated(fert)) then; allocate( fert(g%nx,g%ny));endif
           call check(nf90_open(trim(dynamic_file), nf90_write, ncid ))
-               call check(   nf90_inq_varid(ncid,'FERT'//DDD, var_id )); call check( nf90_get_var(ncid, var_id , FERT ))
+          call check(   nf90_inq_varid(ncid,'FERT'//DDD, var_id ))
+          call check( nf90_get_var(ncid, var_id , FERT ))
           call check(nf90_close(ncid))
        endif
    
@@ -547,50 +576,6 @@ contains
             ppfd_avg = sum(rad24, dim=3)/24 !time_len
        end if             
    
-   !@DEBUG: if (.not. allocated(rad24)) then
-   !@DEBUG:   continue
-   !@DEBUG: else
-   !@DEBUG: !Crear NetCDF
-   !@DEBUG: print*,"defino"
-   !@DEBUG: call check(nf90_create('debug.nc', NF90_CLOBBER, ncid))
-   !@DEBUG:   !Defino dimensiones
-   !@DEBUG:   call check(nf90_def_dim(ncid, "time", 24     , t_dim_id       ))
-   !@DEBUG:   call check(nf90_def_dim(ncid, "x"   , g%nx   , x_dim_id       ))
-   !@DEBUG:   call check(nf90_def_dim(ncid, "y"   , g%ny   , y_dim_id       ))
-   !@DEBUG:   !Defino variables
-   !@DEBUG:   call check(nf90_def_var(ncid,"lat"  , NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
-   !@DEBUG:   call check(nf90_def_var(ncid,"lon"  , NF90_FLOAT  , [x_dim_id,y_dim_id], var_id) )
-   !@DEBUG:   !time
-   !@DEBUG:   call check(nf90_def_var(ncid,"time" ,NF90_INT     , [t_dim_id], var_id  ));
-   !@DEBUG:   !Vars                                                                                                                               
-   !@DEBUG:   call check( nf90_def_var(ncid, 'tmp24' , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'rad24' , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'wnd24' , NF90_FLOAT, [x_dim_id,y_dim_id,t_dim_id], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'tavg'  , NF90_FLOAT, [x_dim_id,y_dim_id         ], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'tmin'  , NF90_FLOAT, [x_dim_id,y_dim_id         ], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'tmax'  , NF90_FLOAT, [x_dim_id,y_dim_id         ], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'wmax'  , NF90_FLOAT, [x_dim_id,y_dim_id         ], var_id)   )
-   !@DEBUG:   call check( nf90_def_var(ncid, 'ravg'  , NF90_FLOAT, [x_dim_id,y_dim_id         ], var_id)   )
-   !@DEBUG: call check(nf90_enddef(ncid))   !End NetCDF define mode
-   !@DEBUG: !Abro NetCDF y guardo variables de salida
-   !@DEBUG: call check(nf90_open('debug.nc', nf90_write, ncid       ))
-   !@DEBUG:   call check(nf90_inq_varid(ncid,"lat"      ,var_id)); call check(nf90_put_var(ncid, var_id, lat ))
-   !@DEBUG:   call check(nf90_inq_varid(ncid,"lon"      ,var_id)); call check(nf90_put_var(ncid, var_id, lon ))
-   !@DEBUG:   !call check(nf90_inq_varid(ncid,"cell_area",var_id)); call check(nf90_put_var(ncid, var_id, cell_area ))
-   !@DEBUG:   call check(nf90_inq_varid(ncid,"time",var_id))     ; call check(nf90_put_var(ncid, var_id, [ (60*60*k,k=0,23 ) ] ))
-   !@DEBUG: 
-   !@DEBUG: print*,"vars"
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'tmp24' ,var_id)); call check(nf90_put_var(ncid, var_id, tmp24 )) 
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'rad24' ,var_id)); call check(nf90_put_var(ncid, var_id, rad24 )) 
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'wnd24' ,var_id)); call check(nf90_put_var(ncid, var_id, wnd24 )) 
-   !@DEBUG: print*,"averges?"
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'tmin'  ,var_id)); call check(nf90_put_var(ncid, var_id, tmp_min )) 
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'tmax'  ,var_id)); call check(nf90_put_var(ncid, var_id, tmp_max )) 
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'wmax'  ,var_id)); call check(nf90_put_var(ncid, var_id, wind_max)) 
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'tavg'  ,var_id)); call check(nf90_put_var(ncid, var_id, tmp_avg )) 
-   !@DEBUG:   call check(nf90_inq_varid(ncid,'ravg'  ,var_id)); call check(nf90_put_var(ncid, var_id, ppfd_avg)) 
-   !@DEBUG: call check(nf90_close( ncid ))
-   !@DEBUG: endif
    
    end subroutine
    
@@ -611,21 +596,22 @@ contains
         if (.not. allocated(laip) ) then; allocate( laip(g%nx,g%ny));endif
         if (.not. allocated(laic) ) then; allocate( laic(g%nx,g%ny));endif
         call check(nf90_open( trim(dynamic_file), nf90_write, ncid ))
-             !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, LAI, [1,1,m], [g%nx,g%ny,1]   ))
-             !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laic, [1,1,m], [g%nx,g%ny,1]   ))
-             call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laic, [1,1,indx], [g%nx,g%ny,1]   ))
+             call check( nf90_inq_varid(ncid,'LAI', var_id ))
+             call check( nf90_get_var(ncid, var_id, laic, [1,1,indx], [g%nx,g%ny,1]   ))
              if (indx .eq. 1)then
-                   !call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,12], [g%nx,g%ny,1]   ))
-                   call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,nlai], [g%nx,g%ny,1]   ))
+                   call check( nf90_inq_varid(ncid,'LAI', var_id ))
+                   call check( nf90_get_var(ncid, var_id, laip, [1,1,nlai], [g%nx,g%ny,1]   ))
              else
-                   call check( nf90_inq_varid(ncid,'LAI', var_id )); call check( nf90_get_var(ncid, var_id, laip, [1,1,indx-1], [g%nx,g%ny,1]   ))
+                   call check( nf90_inq_varid(ncid,'LAI', var_id ))
+                   call check( nf90_get_var(ncid, var_id, laip, [1,1,indx-1], [g%nx,g%ny,1]   ))
              end if
         call check(nf90_close(ncid))
      endif
      if ( run_bdsnp ) then
         if (.not. allocated(ndep)) then; allocate(ndep(g%nx,g%ny));endif
         call check(nf90_open( trim(dynamic_file), nf90_write, ncid ))
-           call check( nf90_inq_varid(ncid,'NITROGEN'//MM, var_id )); call check( nf90_get_var(ncid, var_id , NDEP ))
+           call check( nf90_inq_varid(ncid,'NITROGEN'//MM, var_id ))
+           call check( nf90_get_var(ncid, var_id , NDEP ))
         call check(nf90_close(ncid))
      endif
    end subroutine

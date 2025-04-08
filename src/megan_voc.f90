@@ -255,13 +255,8 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
             ! Light Dependent Emission Factors (LDF)
             IF ( S .EQ. 3 .OR. S .EQ. 4 .OR. S .EQ. 5 .OR. S .EQ. 6 ) THEN
                 LDFMAP = LDF_IN(i,j,S-2) ! only LDF 3, 4, 5, and 6 in file
-                !Just incase unreal number
-                if (LDFMAP .lt. 0 .or. LDFMAP .gt. 1.)then
-                     
-                     LDFMAP = LDF(S) !For these species,  Read LDF from previous MEGVEA.EXT 
-                end if
             ELSE
-                LDFMAP = LDF(S) !For these species,  Read LDF from previous MEGVEA.EXT 
+               LDFMAP = LDF(S) !For these species,  Read LDF from previous MEGVEA.EXT 
             ENDIF
 
             ! EA response to leaf age 
