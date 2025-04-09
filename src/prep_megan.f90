@@ -101,6 +101,7 @@ contains
       integer :: i!,j,k
       !CTF: 
       real, allocatable :: CTF(:,:,:)          !CTF buffer
+      real, allocatable :: VCF(:,:)          !CTF buffer
       real, allocatable :: NeedleFrac(:,:)          !CTF buffer
       real, allocatable :: TropFrac(:,:)          !CTF buffer
       real, allocatable :: cell_area(:,:)          !CTF buffer
@@ -119,6 +120,7 @@ contains
       allocate(TropFrac(ide,jde))
       allocate(cell_area(ide,jde))
       allocate(NeedleFrac(ide,jde))
+      allocate(VCF(ide,jde))
       allocate(ecotypeid(ide,jde,mxetype))
       allocate(ecotypefrac(ide,jde,mxetype))
       allocate(ef_growthform(ide,jde,ncat,nveg))  
@@ -167,6 +169,7 @@ contains
 
       !WRITE CTF:
       CTF=CTF*0.01 ! % to fraction.
+      
       call write_3d_var(outfile,"CTF",CTF,idxs,ncantype+1 )
 
 
@@ -204,17 +207,18 @@ contains
       call write_3d_var(outfile,"LDF_HERB" ,ldf_herb,idxs,nldfs )
       call write_3d_var(outfile,"LDF_CROP" ,ldf_crop,idxs,nldfs )
 
+      VCF = sum(CTF(:,:,4:7),dim=3)
       do i=1,nefs
-        ef_growthform(:,:,i,4) = ef_growthform(:,:,i,4)*CTF(:,:,7)!Tree 
-        ef_growthform(:,:,i,3) = ef_growthform(:,:,i,3)*CTF(:,:,4)!Shrub 
-        ef_growthform(:,:,i,2) = ef_growthform(:,:,i,2)*CTF(:,:,5)!Herb 
-        ef_growthform(:,:,i,1) = ef_growthform(:,:,i,1)*CTF(:,:,6)!Crop 
+        ef_growthform(:,:,i,4) = ef_growthform(:,:,i,4)*CTF(:,:,7)/VCF!Tree 
+        ef_growthform(:,:,i,3) = ef_growthform(:,:,i,3)*CTF(:,:,4)/VCF!Shrub 
+        ef_growthform(:,:,i,2) = ef_growthform(:,:,i,2)*CTF(:,:,5)/VCF!Herb 
+        ef_growthform(:,:,i,1) = ef_growthform(:,:,i,1)*CTF(:,:,6)/VCF!Crop 
       end do
       do i=1,nldfs
-        ef_growthform(:,:,nefs+i,4) = ef_growthform(:,:,nefs+i,4)*CTF(:,:,7)!Tree 
-        ef_growthform(:,:,nefs+i,3) = ef_growthform(:,:,nefs+i,3)*CTF(:,:,4)!Shrub 
-        ef_growthform(:,:,nefs+i,2) = ef_growthform(:,:,nefs+i,2)*CTF(:,:,5)!Herb 
-        ef_growthform(:,:,nefs+i,1) = ef_growthform(:,:,nefs+i,1)*CTF(:,:,6)!Crop 
+        ef_growthform(:,:,nefs+i,4) = ef_growthform(:,:,nefs+i,4)*CTF(:,:,7)/VCF!Tree 
+        ef_growthform(:,:,nefs+i,3) = ef_growthform(:,:,nefs+i,3)*CTF(:,:,4)/VCF!Shrub 
+        ef_growthform(:,:,nefs+i,2) = ef_growthform(:,:,nefs+i,2)*CTF(:,:,5)/VCF!Herb 
+        ef_growthform(:,:,nefs+i,1) = ef_growthform(:,:,nefs+i,1)*CTF(:,:,6)/VCF!Crop 
       end do
 
       ef_grid(:,:,:) = sum(ef_growthform(:,:,1:nefs,:),dim=4) 
@@ -242,6 +246,7 @@ contains
 
 
       deallocate(CTF)
+      deallocate(VCF)
       deallocate(cell_area)
       deallocate(TropFrac)
       deallocate(NeedleFrac)
