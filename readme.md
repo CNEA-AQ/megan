@@ -58,7 +58,8 @@ Edit the namelist `namelist_megan` that contains the following variables:
    lai_scale_factor  =0.1                      !scale factor for LAI data
 
    eco_glb='input/veg_Ecotypes.nc',            ! global ecotype
-   ctf_glb='input/veg_GrowthFormFracions.nc',  ! global canopy type fraction
+   ctf_glb='input/veg_GrowthFormFracions.nc',  ! global canopy type fraction (Needleleaf and tropical tree)
+   grf_glb='input/veg_GrowthFormFracions.nc',  ! global growth form fraction (Tree, Shrub, Herb, and Crop)
    lai_glb='input/LAI_Climatology_2010-2019.nc',                ! global leaf area index
 
    clim_glb='input/soil_climate.nc',           ! global arid/nonarid soils

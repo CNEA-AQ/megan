@@ -43,25 +43,25 @@ module prep_megan
 contains
 
    subroutine prep(wrffile,nlai,lai_scale_factor,                    &
-                   ecotypes_file, growtype_file, laiv_file, GtEcoEF_file,       &
+                   ecotypes_file, canopy_file, growtype_file, laiv_file, GtEcoEF_file,       &
                    run_BDSNP, nitro_file, fert_file, climate_file, landtype_file,idxs)
      implicit none
      integer, intent(in) :: nlai
      real,    intent(in) :: lai_scale_factor
      integer, intent(in) :: idxs(:)
-     character(200), intent(in) :: wrffile,ecotypes_file,growtype_file,&
+     character(200), intent(in) :: wrffile,ecotypes_file,canopy_file,growtype_file,&
                                    laiv_file,climate_file,fert_file,&
                                    landtype_file,nitro_file,GtEcoEF_file
      logical       ,intent(in)  :: run_BDSNP
    
      ! get the wrf grid definition
      call wrf_file(wrffile, ide, jde, cen_lon, cen_lat, stand_lon, truelat1, truelat2, dx)
-   
+  
      ! interpolation
      grid_ndx = 0
    
      !Static data:
-     call prep_static_data(idxs,ide,jde,growtype_file,ecotypes_file,GtEcoEF_file,climate_file,landtype_file, run_BDSNP)
+     call prep_static_data(idxs,ide,jde,canopy_file,growtype_file,ecotypes_file,GtEcoEF_file,climate_file,landtype_file, run_BDSNP)
           ! `CTF` (*Canopy Type Fractions*):
           ! `EFs` (*Emission Factors*)     : (~19) VOC family, and Canopy Type (6)
           ! `LDF` (*Light Dependent EF*)   :  4 VOC families, and Canopy Type (6)
@@ -84,12 +84,12 @@ contains
  !----------------------------------
  !  STATIC  DATA:
  !--------------------------------
-    subroutine prep_static_data(idxs,ide,jde,ctf_file, ecotype_file, GtEcoEF_file, climate_file,landtype_file, run_BDSNP)
+    subroutine prep_static_data(idxs,ide,jde,canopy_file,ctf_file, ecotype_file, GtEcoEF_file, climate_file,landtype_file, run_BDSNP)
       !use area_mapper_grw, only: lon, lat
       implicit none
       integer,         intent(in) :: idxs(:)
       integer,         intent(in) :: ide,jde
-      character(len=*),intent(in) :: ctf_file, ecotype_file, GtEcoEF_file  !input  files
+      character(len=*),intent(in) :: canopy_file,ctf_file, ecotype_file, GtEcoEF_file  !input  files
       character(len=*),intent(in) :: climate_file, landtype_file  !input  files
       character(len=19)           :: outfile='prep_mgn_static.nc' !output file
       logical :: run_BDSNP
@@ -152,8 +152,8 @@ contains
       !==============================================================
 
       print '(A,1X,A)', "Reading:", ctf_file
-      call interpolate_area(ctf_file,"nl_tree"  ,ide,jde,NeedleFrac)
-      call interpolate_area(ctf_file,"trop_tree",ide,jde,TropFrac)
+      call interpolate_area(canopy_file,"nl_tree"  ,ide,jde,NeedleFrac)
+      call interpolate_area(canopy_file,"trop_tree",ide,jde,TropFrac)
       call interpolate_area(ctf_file,"shrub"    ,ide,jde,CTF(:,:,4))
       call interpolate_area(ctf_file,"grass"    ,ide,jde,CTF(:,:,5))
       call interpolate_area(ctf_file,"crop"     ,ide,jde,CTF(:,:,6))
@@ -285,7 +285,7 @@ contains
       real, allocatable :: NFERT(:,:,:)
       logical :: run_BDSNP
       
-      character(len=19) :: out_dyn_file='prep_mgn_dynamic.nc'
+      character(len=200) :: out_dyn_file='prep_mgn_dynamic.nc'
       
       !local variable 
       character(len=2):: kk
@@ -791,7 +791,13 @@ contains
      integer :: ncid,var_id
      integer :: x_dim_id, y_dim_id, nlai_dim_id, month_dim_id, day_dim_id
      integer :: xt,xe,yt,ye,nx,ny
- 
+
+     xt = idxs(1)
+     yt = idxs(2)
+     nx = idxs(3)
+     ny = idxs(4)
+     xe = idxs(1) + idxs(3) - 1
+     ye = idxs(2) + idxs(4) - 1
      !Create File and define dimensions and variables:
      call check(nf90_create(outfile, IOR(NF90_CLOBBER, NF90_NETCDF4), ncid))
         call check(nf90_def_dim(ncid, "west_east"      , nx    , x_dim_id   ))

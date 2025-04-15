@@ -89,7 +89,7 @@ program main
    logical           :: run_flower=.false., run_litter=.false.
 
    !prep-megan namelist variables:
-   character(200) :: eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
+   character(200) :: eco_glb,ctf_glb,grf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
    !character(200) :: griddesc,gridname,eco_glb,ctf_glb,lai_glb,clim_glb,land_glb,fert_glb,ndep_glb,GtEcoEF
    character(3)   :: nlai='12'
    real           :: lai_scale_factor=0.1
@@ -102,7 +102,7 @@ program main
                      lsm,mechanism,static_file,dynamic_file,prep_megan_flag,&
                      run_flower, run_litter, run_bdsnp,use_meteo_lai
    namelist/prep_megan_nl/ nlai,lai_scale_factor,&
-                          eco_glb,ctf_glb,lai_glb,&
+                          eco_glb,ctf_glb,grf_glb,lai_glb,&
                           GtEcoEF,ndep_glb,fert_glb,clim_glb,land_glb
    namelist/windowdefs/ x0,y0,ncolsin,nrowsin
    !reading megan namelist
@@ -138,7 +138,7 @@ program main
    
      print '("========================",/," Runing PREP-MEGAN")'
      call prep(wrf_static_file,lai_num,lai_scale_factor,&
-              eco_glb,ctf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb,idxs)
+              eco_glb,ctf_glb,grf_glb,lai_glb,GtEcoEF,run_bdsnp,ndep_glb,fert_glb,clim_glb,land_glb,idxs)
    
      print '("Files ",A19," and ",A19," has been created by prep_megan")',static_file,dynamic_file
      print '("Re run it to execute MEGAN.                             ")'
