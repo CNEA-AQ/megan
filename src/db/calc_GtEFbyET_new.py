@@ -2,16 +2,16 @@ import pandas as pd
 import numpy as np
 
 # Set file paths
-base_dir = "./orig/"
-ef_file = base_dir + "EFv210806.csv"
+base_dir = "./EF_input_250205/"
+ef_file = base_dir + "EFv250205.csv"
 
 # Read original files
 EF = pd.read_csv(ef_file)
 
-SpCrop = pd.read_csv(base_dir + "SpeciationCrop210806.csv")
-SpHerb = pd.read_csv(base_dir + "SpeciationHerb210806.csv")
-SpShru = pd.read_csv(base_dir + "SpeciationShrub210806.csv")
-SpTree = pd.read_csv(base_dir + "SpeciationTree210725.csv").iloc[:, :3]
+SpCrop = pd.read_csv(base_dir + "SpeciationCrop241129.csv")
+SpHerb = pd.read_csv(base_dir + "SpeciationHerb241129.csv")
+SpShru = pd.read_csv(base_dir + "SpeciationShrub241129.csv")
+SpTree = pd.read_csv(base_dir + "SpeciationTree241129.csv").iloc[:, :3]
 
 # Add vegetation type labels
 SpCrop["Gtyp"] = "Crop"
