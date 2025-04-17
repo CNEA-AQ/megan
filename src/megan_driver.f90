@@ -524,7 +524,7 @@ contains
      wind=sqrt(u10*u10 + v10*v10)
    
      !Ground Incident Radiation [W m-2] to PPFD (Photosynthetic Photon Flux Density [W m-2])
-     ppfd=ppfd*4.5*0.45 ! ppfd = par   * 4.5    !par to ppfd
+     ppfd=ppfd*4.5*0.5 ! ppfd = par   * 4.5    !par to ppfd
                         ! par  = rgrnd * 0.45   !total rad to Photosyntetic Active Radiation (PAR)
    
      !fill daily arrays:
@@ -563,7 +563,8 @@ contains
             allocate( tmp_max(g%nx,g%ny) ) !if (.not. allocated(tmp_max )) 
             allocate(wind_max(g%nx,g%ny) ) !if (.not. allocated(wind_max)) 
             !initialize default variable values:
-            ppfd_avg= 83.4; !              (!CHECK VALUES!)
+            !ppfd_avg= 83.4; !              (!CHECK VALUES!)
+            ppfd_avg=600. ; !              (!CHECK VALUES!)
             tmp_min =283.0; !10deg Celsius (!CHECK VALUES!)
             tmp_avg =288.0; !15deg Celsius (!CHECK VALUES!)
             tmp_max =293.0; !20deg Celsius (!CHECK VALUES!)

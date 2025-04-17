@@ -162,7 +162,7 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
 
            TairK0   = temp(i,j)      !air temperature   [K]                    (from meteo)
            Ws0      = wind(i,j)      !wind velocity     [m/s]                  (from meteo)
-           Solar    = rad(i,j)!/2.25 !phton dnsity flux [umol photons m-2 s-1] (from meteo)
+           Solar    = rad(i,j)/2.25  !solar radiation   [W m-2]                (from meteo)
 
            !(1) calc solar angle
            zenith      = CalcZenith(day,lat(i,j),hour)
@@ -192,10 +192,10 @@ subroutine megan_voc (yyyy,ddd,hh,                         & !year,julian day,ho
 
                 !(4) canopy radiation dist (ppdf)
                 !
-                laiv = LAIc(i,j)/TotalCT
+                laiv = LAIc(i,j)/(TotalCT*0.01)
                 !make sure the laiv is not geater than 7.
-                if (laiv .gt. 7.) then
-                        laiv=7.
+                if (laiv .gt. 8.) then
+                        laiv=8.
                 end if
 
                 !call CanopyRad(VPgausDis, layers, LAIc(i,j), SinZenith,       & !in
@@ -454,6 +454,8 @@ contains
         ELSE
             Alpha  = 0.004
             C1 = 0.0374 * EXP(0.0005 * (PPFD24 - 240)) * (PPFD24 ** 0.6)
+            !C1 = 1.03
+!0.0374 * EXP(0.0005 * (PPFD24 - 240)) * (PPFD24 ** 0.6)
             GAMP= (Alpha * C1 * PPFD1) / SQRT(1.0 + Alpha**2 * PPFD1**2)
         ENDIF
     end function gamp
