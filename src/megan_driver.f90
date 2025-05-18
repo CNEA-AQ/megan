@@ -590,7 +590,12 @@ contains
      m=atoi(mm)
      doy = atoi(ddd)
      time_interval = int(365/nlai)
-     indx = ceiling(real(doy)/real(nlai)) 
+     !indx = ceiling(real(doy)/real(nlai)) 
+     indx = ceiling(real(doy)/real(365/nlai))
+
+     !make sure the range of LAI
+     if (indx > nlai) indx = nlai
+     if (indx < 1) indx = 1 
    
      print*,"   Prep. monthly data.."
      if ( .not. use_meteo_lai ) then
