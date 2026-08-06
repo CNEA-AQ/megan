@@ -88,14 +88,3 @@ Please feel free to contact the developer if you have any issues or suggestions.
 
 
 ---
-## Planned future improvements:
-
-+ [ ] Portability. 
-  - [ ] Find an alternative to sys calls for `date` function.
-+ [ ] Input/Output. 
-  - [x] Incorporate prep-megan.
-  - [x] Reading multiple meteoroligcal files.
-  - [ ] Support to others meteorological models.
-+ [ ] Science.
-  - [ ] Calculate one gamma per CANTYPE. Then use the corresponding EF for this gamma.
-  - [ ] Implement bdsnp.
